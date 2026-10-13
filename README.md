@@ -62,8 +62,11 @@ come from your colour scheme.
 
 <img src="docs/kill-dialog.png" alt="The kill confirmation, with Cancel focused" width="400">
 
-The list refreshes every 3 seconds while the popup is open and every 20 seconds
-when it is closed.
+The list refreshes every 3 seconds while the popup is open. Closed, it refreshes
+every 5 seconds while the badge is showing something and every 20 seconds when
+everything is idle. Every local herdr call has a 5 second timeout, and a server
+whose snapshot cannot be read gets an error on its own row instead of zeroing
+the others.
 
 ## How it finds windows
 
@@ -128,6 +131,7 @@ Every action is a no-op while it is on.
 
 ```bash
 node tests/logic.test.js                                  # pure helpers
+bash tests/script.test.sh                                 # data script, stub herdr
 /usr/lib/qt6/bin/qmllint -I /usr/lib/qt6/qml package/contents/ui/*.qml
 package/contents/scripts/herdboard-sessions list | jq .   # the data the widget draws
 ./build.sh                                                # herdboard.plasmoid

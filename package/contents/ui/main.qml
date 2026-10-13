@@ -44,6 +44,9 @@ PlasmoidItem {
     property string pendingKey: ""
     property bool listBusy: false
     property bool actionBusy: false
+    // A request that arrived while another action was running. Only the last
+    // one is kept: it is what was clicked most recently.
+    property var queuedAction: null
 
     // The agent that started asking since the previous poll blinks, so the
     // sound herdr played has a face. The first poll only sets the baseline.
@@ -144,9 +147,12 @@ PlasmoidItem {
     }
 
     // Polled rather than subscribed: herdr has one event socket per server, and
-    // a tray count can be a few seconds old. Faster while the popup is open.
+    // a tray count can be a few seconds old. Faster while the popup is open,
+    // and while the badge is showing something (needs you, done, working):
+    // that is the only time its colour can go stale on its own. An idle herd
+    // cannot change until you change it.
     Timer {
-        interval: root.expanded ? 3000 : 20000
+        interval: root.expanded ? 3000 : (root.badgeState !== "" ? 5000 : 20000)
         running: true
         repeat: true
         triggeredOnStart: true
@@ -169,8 +175,10 @@ PlasmoidItem {
     // ------------------------------------------------------------- actions
 
     function run(action, session, extra) {
-        if (actionBusy)
+        if (actionBusy) {
+            queuedAction = { action: action, session: session, extra: extra };
             return;
+        }
         const cmd = Logic.actionCommand(script, action, session, extra);
         if (cmd === "")
             return;
@@ -187,6 +195,11 @@ PlasmoidItem {
                 console.warn("herdboard:", action, "gave unexpected output");
             }
             settleTimer.restart();
+            if (queuedAction !== null) {
+                const next = queuedAction;
+                queuedAction = null;
+                run(next.action, next.session, next.extra);
+            }
         });
     }
 

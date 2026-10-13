@@ -98,9 +98,21 @@ Item {
                 }
             }
 
+            // The server is running but its snapshot could not be read: say so
+            // on this row instead of showing it as empty.
             PlasmaComponents3.Label {
                 Layout.fillWidth: true
                 visible: text !== ""
+                text: row.modelData.error || ""
+                textFormat: Text.PlainText
+                elide: Text.ElideRight
+                font: Kirigami.Theme.smallFont
+                color: Kirigami.Theme.negativeTextColor
+            }
+
+            PlasmaComponents3.Label {
+                Layout.fillWidth: true
+                visible: text !== "" && !(row.modelData.error)
                 text: Logic.subtitleFor(row.modelData)
                 textFormat: Text.PlainText
                 elide: Text.ElideRight

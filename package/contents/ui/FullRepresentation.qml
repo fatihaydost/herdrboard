@@ -280,11 +280,16 @@ PlasmaExtras.Representation {
             visible: full.killTarget !== null
             color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.92)
 
-            // Swallow clicks meant for the rows underneath.
+            // Swallow clicks meant for the rows underneath; a click outside the
+            // question itself cancels it.
             MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.AllButtons
-                onClicked: full.closeKill()
+                onClicked: mouse => {
+                    const p = mapToItem(dialogBody, mouse.x, mouse.y);
+                    if (!dialogBody.contains(p))
+                        full.closeKill();
+                }
             }
 
             Keys.onEscapePressed: event => {
@@ -293,6 +298,7 @@ PlasmaExtras.Representation {
             }
 
             ColumnLayout {
+                id: dialogBody
                 anchors.centerIn: parent
                 width: parent.width - Kirigami.Units.gridUnit * 2
                 spacing: Kirigami.Units.largeSpacing

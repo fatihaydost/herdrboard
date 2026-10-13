@@ -91,7 +91,8 @@ valid_session_name() { [[ "${1-}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]]; }
 valid_pane_id() { [[ "${1-}" =~ ^[A-Za-z0-9_-]{1,32}:[A-Za-z0-9_-]{1,32}$ ]]; }
 valid_machine_id() { [[ "${1-}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]]; }
 valid_machine_target() {
-  [[ "${1-}" =~ ^(ssh://)?([A-Za-z0-9._-]+@)?[A-Za-z0-9._-]+(:[0-9]{1,5})?$ ]]
+  # User and host start alphanumeric, so nothing here can read as an option.
+  [[ "${1-}" =~ ^(ssh://)?([A-Za-z0-9][A-Za-z0-9._-]*@)?[A-Za-z0-9][A-Za-z0-9._-]*(:[0-9]{1,5})?$ ]]
 }
 # A KWin window id: a braced QUuid.
 valid_window_id() {
@@ -107,7 +108,17 @@ private_dir() {
   owner="$(stat -c '%u' -- "$dir" 2>/dev/null)" || return 1
   [[ $owner == "$(id -u)" ]] || return 1
   chmod 700 -- "$dir" 2>/dev/null || return 1
+  # Leftovers of a call that was killed before it could clean up.
+  find "$dir" -mindepth 1 -maxdepth 1 -name 'herdboard-*.js' -mmin +1 -delete 2>/dev/null || true
   return 0
+}
+
+# Every local herdr call goes through this: a wedged server (the very case the
+# kill button exists for) must not hang a poll, which would stop the widget
+# refreshing until Plasma restarts.
+readonly LOCAL_TIMEOUT=5
+hd() {
+  timeout --signal=TERM "$LOCAL_TIMEOUT" herdr "$@" < /dev/null
 }
 
 readable_file() { [[ -f "$1" && ! -L "$1" ]]; }
@@ -184,6 +195,9 @@ kwin_script() {
   printf '%s\n' "${body//@TAG@/$tag}" > "$file" || return 1
 
   local since id out=""
+  # Killed half way (plasmashell restarting, say), the script would otherwise
+  # stay loaded in KWin and its file stay on disk.
+  trap '"$q" org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript "$tag" >/dev/null 2>&1; rm -f -- "$file"' EXIT INT TERM
   since=$(( $(date +%s) - 1 ))
   id=$("$q" org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "$file" "$tag" 2>/dev/null) || id=""
   if [[ $id =~ ^[0-9]+$ ]]; then
@@ -199,6 +213,7 @@ kwin_script() {
   fi
   "$q" org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript "$tag" >/dev/null 2>&1 || true
   rm -f -- "$file"
+  trap - EXIT INT TERM
 
   [[ -n $out ]] || return 1
   over_byte_cap "$out" "$WINDOWS_BYTE_CAP" && return 1
@@ -243,7 +258,10 @@ kwin_activate() {
     if (String(w.internalId) !== want) continue;
     if (w.minimized) w.minimized = false;
     var desks = w.desktops || [];
-    if (!w.onAllDesktops && desks.length > 0 && desks.indexOf(workspace.currentDesktop) < 0)
+    var cur = workspace.currentDesktop;
+    var here = false;
+    for (var d = 0; d < desks.length; d++) if (desks[d].id === cur.id) here = true;
+    if (!w.onAllDesktops && desks.length > 0 && !here)
       workspace.currentDesktop = desks[0];
     workspace.activeWindow = w;
     print("@TAG@ ok");
@@ -257,6 +275,41 @@ kwin_activate() {
 }
 
 # ---------------------------------------------------------------- windows
+
+# Read a session (and remote target) out of a process command line, when that
+# process is a herdr client: argv[0] is herdr and everything after it is a
+# flag (`--session <name>`, `--session=<name>`, `--remote <target>`, ...).
+# `herdr server`, `herdr api ...` are not clients, and neither is `man herdr`,
+# `vim herdr` or `ssh box herdr`: only argv[0] counts.
+#
+# Answers in $found_session/$found_target instead of stdout: this runs once per
+# herdr-looking process and a command substitution would fork each time.
+found_session=""
+found_target=""
+session_in_args() {
+  found_session=""
+  found_target=""
+  local -a words
+  read -r -a words <<<"${1-}"
+  (( ${#words[@]} > 0 )) || return 1
+  [[ ${words[0]##*/} == herdr ]] || return 1
+  local j name=default target=""
+  for ((j = 1; j < ${#words[@]}; j++)); do
+    case ${words[j]} in
+      --session) name=${words[j + 1]-}; j=$((j + 1)) ;;
+      --session=*) name=${words[j]#--session=} ;;
+      --remote) target=${words[j + 1]-}; j=$((j + 1)) ;;
+      --remote=*) target=${words[j]#--remote=} ;;
+      -*) ;;
+      *) return 1 ;;
+    esac
+  done
+  valid_session_name "$name" || return 1
+  [[ -z $target ]] || valid_machine_target "$target" || return 1
+  found_session=$name
+  found_target=$target
+  return 0
+}
 
 # One step up the process tree, read from /proc. The comm field is bracketed
 # and may hold spaces, so the line is cut after the closing bracket first.
@@ -309,36 +362,6 @@ window_map() {
   declare -A emitted=()
   local found_session="" found_target=""
 
-  # Read a session (and remote target) out of a herdr client command line.
-  # Answers in $found_session/$found_target instead of stdout: this runs once
-  # per herdr process and a command substitution would fork each time.
-  session_in_args() {
-    found_session=""
-    found_target=""
-    local -a words
-    read -r -a words <<<"${1-}"
-    local i j name target
-    for ((i = 0; i < ${#words[@]}; i++)); do
-      [[ ${words[i]##*/} == herdr ]] || continue
-      name=default
-      target=""
-      for ((j = i + 1; j < ${#words[@]}; j++)); do
-        case ${words[j]} in
-          --session) name=${words[j + 1]-}; j=$((j + 1)) ;;
-          --remote) target=${words[j + 1]-}; j=$((j + 1)) ;;
-          -*) ;;
-          *) return 1 ;;
-        esac
-      done
-      valid_session_name "$name" || return 1
-      [[ -z $target ]] || valid_machine_target "$target" || return 1
-      found_session=$name
-      found_target=$target
-      return 0
-    done
-    return 1
-  }
-
   local ancestor hops
   for pid in "${!args_of[@]}"; do
     session_in_args "${args_of[$pid]}" || continue
@@ -366,9 +389,9 @@ window_map() {
 snapshot_for() {
   local name="$1" is_default="$2" out
   if [[ $is_default == true ]]; then
-    out=$(herdr api snapshot 2>/dev/null < /dev/null | head -c "$((SNAPSHOT_BYTE_CAP + 1))") || true
+    out=$(hd api snapshot 2>/dev/null | head -c "$((SNAPSHOT_BYTE_CAP + 1))") || true
   else
-    out=$(herdr --session "$name" api snapshot 2>/dev/null < /dev/null | head -c "$((SNAPSHOT_BYTE_CAP + 1))") || true
+    out=$(hd --session "$name" api snapshot 2>/dev/null | head -c "$((SNAPSHOT_BYTE_CAP + 1))") || true
   fi
   [[ -n $out ]] || return 1
   over_byte_cap "$out" "$SNAPSHOT_BYTE_CAP" && return 1
@@ -402,6 +425,7 @@ readonly ROWS_JQ='
            isDefault: (.default // false),
            running: (.running // false),
            version: ($snap.version // ""),
+           error: (if (.running // false) then ($snapshots[$name].herdboardError // "") else "" end),
            agents: ($agents | length),
            working: ([$agents[] | select(.agent_status == "working")] | length),
            blocked: ([$agents[] | select(.agent_status == "blocked")] | length),
@@ -436,7 +460,7 @@ readonly ROWS_JQ='
 # shows a session is a fact about this desktop, not about the session's host.
 collect_sessions() {
   local sessions_json
-  sessions_json=$(herdr session list --json 2>/dev/null < /dev/null | head -c "$((SESSIONS_BYTE_CAP + 1))") || true
+  sessions_json=$(hd session list --json 2>/dev/null | head -c "$((SESSIONS_BYTE_CAP + 1))") || true
   [[ -n $sessions_json ]] || die "could not reach herdr"
   over_byte_cap "$sessions_json" "$SESSIONS_BYTE_CAP" && die "session list too large to read safely"
 
@@ -457,8 +481,14 @@ collect_sessions() {
     seen=$(( seen + 1 ))
 
     if [[ $running == true ]]; then
-      snap=$(snapshot_for "$name" "$is_default") || continue
-      snapshots+="${snapshots:+,}\"$name\":$snap"
+      # A server that does not answer, or answers with something that is not
+      # a snapshot, gets an error on its own row; the others still count.
+      if snap=$(snapshot_for "$name" "$is_default") &&
+         printf '%s' "$snap" | jq -e '.result.snapshot | objects' >/dev/null 2>&1; then
+        snapshots+="${snapshots:+,}\"$name\":$snap"
+      else
+        snapshots+="${snapshots:+,}\"$name\":{\"herdboardError\":\"no answer from this server\"}"
+      fi
       continue
     fi
 
@@ -477,7 +507,7 @@ collect_sessions() {
     jq -r '.sessions[]? | "\(.name)\t\(.default // false)\t\(.running // false)\t\(.session_dir // "")"')
   snapshots="{$snapshots}"
   saved="{$saved}"
-  # One truncated or unparseable reply must not take the whole list down.
+  # Every snapshot was checked on its own above, so this is only a backstop.
   printf '%s' "$saved" | jq -e . >/dev/null 2>&1 || saved="{}"
   printf '%s' "$snapshots" | jq -e . >/dev/null 2>&1 || snapshots='{}'
 
@@ -493,7 +523,7 @@ collect_sessions() {
 # local sessions are what every install stands on.
 machine_list() {
   local out
-  out=$(herdr machine list --json 2>/dev/null < /dev/null | head -c "$((MACHINES_BYTE_CAP + 1))") || true
+  out=$(hd machine list --json 2>/dev/null | head -c "$((MACHINES_BYTE_CAP + 1))") || true
   [[ -n $out ]] || { printf '[]'; return 0; }
   over_byte_cap "$out" "$MACHINES_BYTE_CAP" && { printf '[]'; return 0; }
   printf '%s' "$out" | jq -c '
@@ -521,7 +551,7 @@ machine_target() {
 # `herdr --machine` routing landed in 0.9.1.
 remote_floor_met() {
   local v
-  v=$(herdr --version 2>/dev/null < /dev/null) || return 1
+  v=$(hd --version 2>/dev/null) || return 1
   v=${v#herdr }
   [[ $v =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
   [[ $(printf '%s\n' "$v" 0.9.1 | sort -V | head -1) == 0.9.1 ]]
@@ -745,9 +775,9 @@ cmd_focus() {
     target=$(machine_target "$machine") || die "no such machine"
     timeout --signal=TERM 15 herdr --machine "$machine" agent focus "$pane" >/dev/null 2>&1 < /dev/null || true
   elif [[ $name == default ]]; then
-    herdr agent focus "$pane" >/dev/null 2>&1 < /dev/null || true
+    hd agent focus "$pane" >/dev/null 2>&1 || true
   else
-    herdr --session "$name" agent focus "$pane" >/dev/null 2>&1 < /dev/null || true
+    hd --session "$name" agent focus "$pane" >/dev/null 2>&1 || true
   fi
 
   show_session "$name" "$target" || die "no terminal available"
@@ -763,9 +793,9 @@ server_pid_for() {
   local socket="$1" pid
   [[ -n $socket ]] || return 1
   command -v ss >/dev/null 2>&1 || return 1
-  pid=$(ss -lpxn 2>/dev/null | awk -v want="$socket " '
-    index($0, want) == 0 { next }
-    match($0, /pid=[0-9]+/) { print substr($0, RSTART + 4, RLENGTH - 4); exit }')
+  # The local address column compared whole, not as a substring.
+  pid=$(ss -lpxnH 2>/dev/null | awk -v want="$socket" '
+    $5 == want && match($0, /pid=[0-9]+/) { print substr($0, RSTART + 4, RLENGTH - 4); exit }')
   [[ $pid =~ ^[0-9]+$ ]] || return 1
 
   # Checked again before signalling: it must still be a herdr server.
@@ -777,7 +807,7 @@ server_pid_for() {
 }
 
 socket_of() {
-  herdr session list --json 2>/dev/null < /dev/null |
+  hd session list --json 2>/dev/null |
     jq -r --arg name "$1" '.sessions[]? | select(.name == $name) | .socket_path // ""' 2>/dev/null
 }
 
@@ -809,7 +839,7 @@ cmd_delete() {
   valid_session_name "$name" || die "not a session name"
   [[ $name == default ]] && die "the default session is not deleted from here"
   [[ -z ${2-} ]] || die "remote sessions are not deleted from here"
-  herdr session delete "$name" >/dev/null 2>&1 < /dev/null || true
+  hd session delete "$name" >/dev/null 2>&1 || true
   printf '{"ok":true}\n'
 }
 
@@ -820,6 +850,11 @@ cmd_windows() {
 }
 
 # ------------------------------------------------------------------- main
+
+# Sourced (by tests/script.test.sh): define the functions, run nothing.
+if [[ ${BASH_SOURCE[0]} != "$0" ]]; then
+  return 0
+fi
 
 require_tools
 
