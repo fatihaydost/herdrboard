@@ -1,0 +1,25 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "fatihaydostt@gmail.com",
+                "Name": "Fatih Aydost"
+            }
+        ],
+        "BugReportUrl": "https://github.com/fatihaydost/herdboard/issues",
+        "Category": "Utilities",
+        "Description": "herdr sessions in the system tray: every server and agent at a glance, one click to open or focus one",
+        "EnabledByDefault": true,
+        "Icon": "utilities-terminal",
+        "Id": "io.github.fatihaydost.herdboard",
+        "License": "MIT",
+        "Name": "Herdboard",
+        "Version": "0.1.0",
+        "Website": "https://github.com/fatihaydost/herdboard"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-MainScript": "ui/main.qml",
+    "X-Plasma-NotificationArea": "true",
+    "X-Plasma-NotificationAreaCategory": "ApplicationStatus"
+}

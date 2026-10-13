@@ -1,0 +1,4 @@
+# build output: attach to a GitHub release instead of committing
+*.plasmoid
+# machine-specific build notes (PIDs, paths), kept out of a public repo
+docs/BUILD-REPORT.md

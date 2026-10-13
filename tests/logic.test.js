@@ -1,0 +1,126 @@
+// Unit tests for package/contents/ui/logic.js. Run: node tests/logic.test.js
+"use strict";
+
+const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
+const vm = require("vm");
+const { execFileSync } = require("child_process");
+
+const src = fs.readFileSync(path.join(__dirname, "../package/contents/ui/logic.js"), "utf8")
+    .replace(/^\.pragma library\s*$/m, "");
+const L = {};
+vm.runInNewContext(src + "\nObject.assign(out, {shellQuote, validName, validPane, validMachine, actionCommand, rowKey, agentKey, attentionRank, agentWants, sessionState, badgeState, agentNote, noteLabel, countLabel, sessionLabel, machineName, subtitleFor, cleanTitle, agentPlace, unreachableText, navRows, bestRow, attention, richEscape});", { out: L });
+
+let n = 0;
+function test(name, fn) {
+    fn();
+    n += 1;
+    console.log("ok", n, "-", name);
+}
+
+const bash = (script) => execFileSync("bash", ["-c", script], { encoding: "utf8" });
+
+test("shellQuote survives bash for nasty strings", () => {
+    for (const s of ["plain", "it's", "a b\tc", "$(touch /tmp/pwned)", "`id`", "'; rm -rf / #", "çğış → ✓", "new\nline", ""])
+        assert.strictEqual(bash("printf %s " + L.shellQuote(s)), s);
+});
+
+test("argument fences", () => {
+    assert.ok(L.validName("default") && L.validName("my-proj.2") && L.validName("3"));
+    for (const bad of ["", "-rf", ".hidden", "a b", "a/b", "x".repeat(65), "$(id)", "a;b"])
+        assert.ok(!L.validName(bad), bad);
+    assert.ok(L.validPane("w1:p2") && L.validPane("w_a-1:p-2"));
+    for (const bad of ["w1", "w1:p2:x", ":p1", "w1:", "w 1:p1", "-w:p"])
+        assert.ok(L.validPane(bad) === (bad === "-w:p"), bad);
+    assert.ok(!L.validMachine("-x") && L.validMachine("m1"));
+});
+
+test("actionCommand quotes everything and refuses bad shapes", () => {
+    const s = { name: "proj", remote: false };
+    assert.strictEqual(L.actionCommand("/p a/x", "open", s), "bash '/p a/x' 'open' 'proj'");
+    assert.strictEqual(L.actionCommand("/x", "focus", s, "w1:p2"), "bash '/x' 'focus' 'proj' 'w1:p2'");
+    assert.strictEqual(L.actionCommand("/x", "open", { name: "default", remote: true, machineId: "m1" }), "bash '/x' 'open' 'default' 'm1'");
+    assert.strictEqual(L.actionCommand("/x", "open", { name: "a;b" }), "");
+    assert.strictEqual(L.actionCommand("/x", "open", { name: "ok", remote: true, machineId: "-bad" }), "");
+    assert.strictEqual(L.actionCommand("/x", "open", null), "");
+});
+
+test("states: waiting beats finished beats busy", () => {
+    assert.strictEqual(L.sessionState({ running: false, blocked: 3 }), "stopped");
+    assert.strictEqual(L.sessionState({ running: true, blocked: 1, done: 2, working: 3 }), "blocked");
+    assert.strictEqual(L.sessionState({ running: true, done: 2, working: 3 }), "done");
+    assert.strictEqual(L.sessionState({ running: true, working: 3 }), "working");
+    assert.strictEqual(L.sessionState({ running: true }), "idle");
+    assert.ok(L.attentionRank("blocked") < L.attentionRank("done"));
+    assert.ok(L.attentionRank("done") < L.attentionRank("working"));
+    assert.ok(L.attentionRank("working") < L.attentionRank("idle"));
+    assert.ok(L.attentionRank("idle") < L.attentionRank("weird"));
+});
+
+test("badge: none when idle or nothing running", () => {
+    assert.strictEqual(L.badgeState({ running: 0, blocked: 1 }), "");
+    assert.strictEqual(L.badgeState({ running: 2 }), "");
+    assert.strictEqual(L.badgeState({ running: 2, working: 1 }), "working");
+    assert.strictEqual(L.badgeState({ running: 2, working: 1, done: 1 }), "done");
+    assert.strictEqual(L.badgeState({ running: 2, working: 1, done: 1, blocked: 1 }), "blocked");
+});
+
+test("labels", () => {
+    assert.strictEqual(L.agentNote("idle"), "ready");
+    assert.strictEqual(L.agentNote("blocked"), "needs you");
+    assert.strictEqual(L.noteLabel({ running: true, blocked: 2, done: 1 }), "2 needs you");
+    assert.strictEqual(L.noteLabel({ running: true }), "");
+    assert.strictEqual(L.countLabel({ running: false }), "stopped");
+    assert.strictEqual(L.countLabel({ running: true, agents: 0 }), "no agents");
+    assert.strictEqual(L.countLabel({ running: true, agents: 1 }), "1 agent");
+    assert.strictEqual(L.countLabel({ running: true, agents: 4 }), "4 agents");
+    assert.strictEqual(L.sessionLabel({ name: "default", isDefault: true }), "Shared session");
+    assert.strictEqual(L.sessionLabel({ name: "default", isDefault: true, remote: true, machineLabel: "box" }), "box");
+    // Numbered sessions are just names here: no workspace mapping.
+    assert.strictEqual(L.sessionLabel({ name: "3" }), "3");
+    assert.strictEqual(L.machineName({ name: "x", remote: true, machineLabel: "box" }), "box");
+    assert.strictEqual(L.machineName({ name: "x", remote: false }), "");
+    assert.strictEqual(L.subtitleFor({ running: false, projects: [] }), "nothing saved");
+    assert.strictEqual(L.subtitleFor({ running: false, projects: ["a", "b"] }), "a  ·  b");
+    assert.strictEqual(L.subtitleFor({ running: true, projects: [], agentList: [] }), "no workspaces yet");
+    assert.strictEqual(L.subtitleFor({ running: true, projects: ["a"], agentList: [{}] }), "");
+    assert.strictEqual(L.cleanTitle("⠋ Building the thing"), "Building the thing");
+    assert.strictEqual(L.cleanTitle("✳✳"), "✳✳");
+    assert.strictEqual(L.agentPlace({ workspace: "api", tab: "" }), "api");
+    assert.strictEqual(L.agentPlace({ workspace: "api", tab: "Tests" }), "api  ·  Tests");
+    assert.strictEqual(L.unreachableText([{ ok: true }]), "");
+    assert.strictEqual(L.unreachableText([{ ok: false, label: "gpu", error: "unreachable" }, { ok: false, id: "m3", error: "Host key" }]), "unreachable: gpu, m3 (Host key)");
+});
+
+test("navRows and bestRow", () => {
+    const sessions = [
+        { name: "a", agentList: [{ status: "idle" }, { status: "working" }] },
+        { name: "b", agentList: [] },
+        { name: "c", agentList: [{ status: "done" }] },
+    ];
+    const rows = L.navRows(sessions);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(rows)), [
+        { sessionIndex: 0, agentIndex: 0 }, { sessionIndex: 0, agentIndex: 1 },
+        { sessionIndex: 1, agentIndex: -1 }, { sessionIndex: 2, agentIndex: 0 }]);
+    assert.strictEqual(L.bestRow(sessions, rows), 3);
+    assert.strictEqual(L.bestRow([{ agentList: [] }], L.navRows([{ agentList: [] }])), 0);
+    assert.strictEqual(L.bestRow([], []), -1);
+});
+
+test("attention: only what started asking since the last poll", () => {
+    const s = (status, seq) => [{ name: "a", agentList: [{ pane: "w1:p1", status: "blocked", seq: 1 }, { pane: "w1:p2", status: status, seq: seq }] }];
+    const first = L.attention(s("idle", 0), {});
+    assert.strictEqual(first.fresh, L.agentKey({ name: "a" }, "w1:p1"));
+    const second = L.attention(s("done", 7), first.wanting);
+    assert.strictEqual(second.fresh, L.agentKey({ name: "a" }, "w1:p2"));
+    const third = L.attention(s("done", 7), second.wanting);
+    assert.strictEqual(third.fresh, "");
+    assert.notStrictEqual(L.rowKey({ name: "default", machineId: "m1" }), L.rowKey({ name: "default" }));
+});
+
+test("richEscape", () => {
+    assert.strictEqual(L.richEscape("<img src=\"http://x\">&'"), "&lt;img src=&quot;http://x&quot;&gt;&amp;&#39;");
+});
+
+console.log("all", n, "tests passed");
