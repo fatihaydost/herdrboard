@@ -9,7 +9,7 @@ import org.kde.plasma.components as PlasmaComponents3
 import "logic.js" as Logic
 
 // One herdr session, laid out as a section: a header line (name, a quiet hint,
-// a hairline, and the open / kill or delete buttons, which show on hover or
+// a hairline, and the open / kill or delete buttons, quiet until hover or
 // keyboard focus), then one row per agent. Clicking the header opens the
 // session; clicking an agent lands on it.
 ColumnLayout {
@@ -101,7 +101,7 @@ ColumnLayout {
 
             RowLayout {
                 spacing: 0
-                opacity: row.actionsShown ? 1 : 0
+                opacity: row.actionsShown ? 1 : 0.6
                 Behavior on opacity { NumberAnimation { duration: Kirigami.Units.shortDuration } }
 
                 IconButton {
