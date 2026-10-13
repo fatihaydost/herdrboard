@@ -48,7 +48,9 @@ come from your colour scheme.
 - **Click a session** (or `O`) to open it. A session shows at most one window,
   because two windows on one session mirror each other, so this raises the
   window that already shows it (switching virtual desktop and un-minimising if
-  needed) and only opens a new Konsole window when there is none.
+  needed) and only opens a new window when there is none, in your default
+  terminal (System Settings → Default Applications → Terminal; Konsole when
+  nothing is set).
 - **Click an agent line** (or `Enter`) to land on that agent: its pane is
   focused inside the server first, then the window comes up. That also marks a
   finished agent as seen.
@@ -84,8 +86,9 @@ runs while the popup is open or when you open a session.
 
 A terminal that puts every window in one process (kitty `--single-instance`,
 Konsole's single-process mode) gives several windows the same process id. Those
-windows are skipped rather than guessed at, so opening such a session starts a
-new window. Windows Herdboard opens itself use `konsole --separate`.
+windows are skipped rather than guessed at: the session is not shown bold and
+opening it starts another window. Plain `kitty` and Konsole (which Herdboard
+starts with `--separate`) are matched normally.
 
 ## Remote machines
 
@@ -112,8 +115,9 @@ it does not, right-click the tray arrow → *Configure System Tray…* →
 Requirements: Plasma 6, `herdr` and `jq`. `qdbus6` and `journalctl` find the
 window showing a session (without them every session looks windowless and a
 click opens a new window), `ss` (iproute2) finds the process behind a session
-for the skull, and `konsole` opens windows (falling back to
-`xdg-terminal-exec`).
+for the skull, and windows open in your default terminal
+(`TerminalApplication`/`TerminalService` in kdeglobals, then
+`xdg-terminal-exec`, then `konsole`).
 
 ## Screenshots without your data
 

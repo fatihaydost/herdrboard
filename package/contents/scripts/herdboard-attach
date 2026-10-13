@@ -1,0 +1,12 @@
+#!/bin/bash
+# herdboard-attach: what a terminal opened by Herdboard runs.
+#
+# The session and remote target arrive in the environment, never on the
+# terminal's command line: Qt applications (Konsole among them) treat
+# `--session <id>` anywhere in their argv as a session-management option and
+# remove it, so `konsole -e herdr --session x` would start plain `herdr`.
+a=(herdr)
+[ -n "${HERDBOARD_REMOTE-}" ] && a+=(--remote "$HERDBOARD_REMOTE")
+[ -n "${HERDBOARD_SESSION-}" ] && a+=(--session "$HERDBOARD_SESSION")
+unset HERDBOARD_REMOTE HERDBOARD_SESSION
+exec "${a[@]}"

@@ -52,6 +52,7 @@ export LC_ALL=C
 # own server. This script is always an outside client.
 unset HERDR_ENV HERDR_SOCKET_PATH HERDR_PANE_ID HERDR_TAB_ID HERDR_WORKSPACE_ID
 
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/herdboard"
 readonly DEMO_FILE="$CACHE_DIR/demo"
 readonly RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}/herdboard-$(id -u)"
@@ -701,6 +702,105 @@ cmd_list() {
   ' 2>/dev/null || die "unexpected output from herdr"
 }
 
+# ------------------------------------------------------------- terminal
+
+# The user's terminal, as words: what System Settings > Default Applications >
+# Terminal wrote to kdeglobals (TerminalApplication, a command line; or
+# TerminalService, a .desktop file whose Exec is used), then
+# xdg-terminal-exec, then Konsole (KDE's own default when nothing is set).
+# The value is split into words, never evaluated by a shell. Prints one word
+# per line; returns 1 when nothing usable is found.
+terminal_words() {
+  local -a words=()
+  local value=""
+  if command -v kreadconfig6 >/dev/null 2>&1; then
+    value=$(kreadconfig6 --file kdeglobals --group General --key TerminalApplication 2>/dev/null) || value=""
+  fi
+  if [[ -n $value ]]; then
+    read -r -a words <<<"$value"
+    if (( ${#words[@]} )) && command -v -- "${words[0]}" >/dev/null 2>&1; then
+      printf '%s\n' "${words[@]}"
+      return 0
+    fi
+  fi
+
+  local service=""
+  if command -v kreadconfig6 >/dev/null 2>&1; then
+    service=$(kreadconfig6 --file kdeglobals --group General --key TerminalService 2>/dev/null) || service=""
+  fi
+  if [[ $service =~ ^[A-Za-z0-9._-]+\.desktop$ ]]; then
+    local dir file exec_line=""
+    local IFS_SAVE=$IFS
+    IFS=:
+    for dir in "${XDG_DATA_HOME:-$HOME/.local/share}" ${XDG_DATA_DIRS:-/usr/local/share:/usr/share}; do
+      file="$dir/applications/$service"
+      if readable_file "$file"; then
+        exec_line=$(sed -n '/^\[Desktop Entry\]/,/^\[/{s/^Exec=//p}' -- "$file" | head -1)
+        break
+      fi
+    done
+    IFS=$IFS_SAVE
+    # Exec quoting rules are not reimplemented: a quoted or escaped Exec is
+    # skipped rather than split wrongly.
+    if [[ -n $exec_line && $exec_line != *[\"\'\\]* ]]; then
+      read -r -a words <<<"$exec_line"
+      local -a kept=()
+      local w
+      for w in "${words[@]}"; do
+        [[ $w =~ ^%[a-zA-Z]$ ]] && continue
+        kept+=("${w//%%/%}")
+      done
+      if (( ${#kept[@]} )) && command -v -- "${kept[0]}" >/dev/null 2>&1; then
+        printf '%s\n' "${kept[@]}"
+        return 0
+      fi
+    fi
+  fi
+
+  if command -v xdg-terminal-exec >/dev/null 2>&1; then
+    printf '%s\n' xdg-terminal-exec
+    return 0
+  fi
+  if command -v konsole >/dev/null 2>&1; then
+    printf '%s\n' konsole
+    return 0
+  fi
+  return 1
+}
+
+# Fill the caller's `launch` array: the terminal plus how that terminal is
+# told to run a program, plus the program ($1). Unknown terminals get `-e`,
+# the xterm convention most of them follow.
+launch_argv() {
+  local program="$1" line
+  local -a term=()
+  while IFS= read -r line; do term+=("$line"); done < <(terminal_words)
+  (( ${#term[@]} )) || return 1
+
+  local -a run=("$program")
+  [[ -x $program ]] || run=(bash "$program")
+
+  case ${term[0]##*/} in
+    konsole)
+      # A window of its own process, so the window lookup (one pid, one
+      # window) can tell it apart from the user's other Konsole windows.
+      local w has=0
+      for w in "${term[@]}"; do [[ $w == --separate || $w == --nofork ]] && has=1; done
+      (( has )) || term+=(--separate)
+      launch=("${term[@]}" -e "${run[@]}") ;;
+    gnome-terminal|kgx|ptyxis|tilix|xfce4-terminal|mate-terminal)
+      launch=("${term[@]}" -- "${run[@]}") ;;
+    wezterm|wezterm-gui)
+      if [[ ${term[1]-} == start ]]; then launch=("${term[@]}" -- "${run[@]}")
+      else launch=("${term[@]}" start -- "${run[@]}"); fi ;;
+    foot|footclient|kitty|xdg-terminal-exec)
+      launch=("${term[@]}" "${run[@]}") ;;
+    *)
+      # konsole-style and xterm-style: alacritty, xterm, urxvt, ghostty, st...
+      launch=("${term[@]}" -e "${run[@]}") ;;
+  esac
+}
+
 # ------------------------------------------------------------- open a session
 
 # Raise the window showing a session, or start one. A session shows at most one
@@ -717,30 +817,13 @@ show_session() {
 
   # `herdr --session <name>` attaches to a running server and starts one when
   # there is none, so one command covers both. `--remote` is the attach form
-  # for a session on another machine.
-  #
-  # The arguments reach herdr through the environment and a two-line bash
-  # wrapper, never on the terminal's command line: Qt treats `--session <id>`
-  # anywhere in a Qt application's argv as its own session-management option
-  # and removes it, so `konsole -e herdr --session x` would start plain `herdr`.
-  local wrapper='a=(herdr)
-[ -n "${HERDBOARD_REMOTE-}" ] && a+=(--remote "$HERDBOARD_REMOTE")
-[ -n "${HERDBOARD_SESSION-}" ] && a+=(--session "$HERDBOARD_SESSION")
-unset HERDBOARD_REMOTE HERDBOARD_SESSION
-exec "${a[@]}"'
+  # for a session on another machine. Both arrive in herdboard-attach through
+  # the environment (see that file for why).
   local session_arg=""
   [[ $name == default ]] || session_arg=$name
 
   local -a launch=()
-  if command -v konsole >/dev/null 2>&1; then
-    # --separate: a window of its own process, so the window lookup can tell
-    # it apart from the user's other Konsole windows.
-    launch=(konsole --separate --workdir "$HOME" -e bash -c "$wrapper")
-  elif command -v xdg-terminal-exec >/dev/null 2>&1; then
-    launch=(xdg-terminal-exec "--dir=$HOME" -- bash -c "$wrapper")
-  else
-    return 1
-  fi
+  launch_argv "$SCRIPT_DIR/herdboard-attach" || return 1
 
   (
     umask "$INHERITED_UMASK"
