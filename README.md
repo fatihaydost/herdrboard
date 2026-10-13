@@ -6,7 +6,7 @@
 
 ![Plasma 6](https://img.shields.io/badge/Plasma-6-1d99f3) ![License: MIT](https://img.shields.io/badge/license-MIT-green) ![Version](https://img.shields.io/badge/version-0.1.0-blue)
 
-<img src="docs/popup.png" alt="The Herdboard popup listing five herdr sessions with the agents inside each" width="400">
+<img src="docs/popup.png" alt="The Herdboard popup in a dark colour scheme, listing herdr sessions with the agents inside each" width="400"> <img src="docs/popup-light.png" alt="The same popup in Breeze Light" width="400">
 
 </div>
 
@@ -17,20 +17,20 @@ click away.
 
 ## What it shows
 
-The tray icon carries the number of running servers on a badge. It turns
-**red** when an agent is waiting on an answer, **green** when work finished
-while you were looking elsewhere, and **amber** while something is still
-running. When every agent is idle the badge goes away.
+The tray icon carries a small corner mark. It is **red with a number** when
+agents are waiting on an answer (the number is how many), a **green dot** when
+work finished while you were looking elsewhere, and an **amber dot** while
+something is still running. When every agent is idle there is no mark. Server
+and agent totals are in the tooltip.
 
-<img src="docs/badges.png" alt="The tray icon at 22 and 32 pixels: red, green and amber badges, no badge when idle, dimmed when herdr cannot be reached" width="400">
+<img src="docs/badges.png" alt="The tray icon at 22 and 32 pixels: red mark with a count, green and amber dots, no mark when idle, dimmed when herdr cannot be reached" width="330">
 
-Each row in the popup is one session:
-
-- its name, in **bold** when a window is already showing it
-- how many agents it holds, or what the most urgent of them is up to
-- every agent inside it: where it sits (workspace · tab), its terminal title,
-  and its state in one right-hand column
-- for a stopped session, the workspaces herdr saved for it
+Each session is a section: its name with a quiet hint (`default` for the
+shared session, and the workspace when all its agents share one), then one row
+per agent. A row leads with what the agent is doing (its terminal title); the
+second line is its kind (claude, codex, ...) and where it sits. A stopped
+session names the workspaces herdr saved for it. The open and kill buttons of
+a session appear when you hover its header or reach it with the keyboard.
 
 | state | colour | meaning |
 |---|---|---|
@@ -39,9 +39,14 @@ Each row in the popup is one session:
 | working | neutral (amber) | busy |
 | ready | dim | idle, waiting for input |
 
-Agents that need you or are done wash their whole line in that colour. The
-agent that started asking since the last refresh has a pulsing dot. All colours
-come from your colour scheme.
+State is said once, on the right: a pill for **needs you** and **done** (and
+a light wash over the row), quiet text for working and ready. The pill of the
+agent that started asking since the last refresh breathes. All colours come
+from your colour scheme. With nothing to show, the popup says so in one
+sentence with one action: *New Session*, *Try Again*, or *Get herdr*.
+
+In the system tray the tray's own header carries the title and the refresh,
+configure and pin buttons; Herdboard draws no second header there.
 
 ## What it does
 

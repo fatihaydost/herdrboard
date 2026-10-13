@@ -46,16 +46,23 @@ MouseArea {
         opacity: compact.herd.reachable ? 1 : 0.5
     }
 
+    // A corner mark, small enough to leave the icon readable at 22 px. Only
+    // "needs you" carries a number (how many agents wait on you, the one count
+    // worth reading at that size); done and working are a plain dot. Server
+    // and agent totals live in the tooltip.
     Rectangle {
         id: badge
+        readonly property string label: compact.herd.badgeCount
         visible: compact.herd.reachable && compact.herd.badgeState !== "" && compact.width >= Kirigami.Units.iconSizes.small
         anchors.right: parent.right
         anchors.top: parent.top
-        height: Math.max(Math.round(compact.height * 0.5), Kirigami.Units.iconSizes.small * 0.75)
+        height: label !== ""
+            ? Math.max(Math.round(compact.height * 0.42), 8)
+            : Math.max(Math.round(compact.height * 0.3), 6)
         width: Math.max(height, countLabel.implicitWidth + Kirigami.Units.smallSpacing)
         radius: height / 2
         color: compact.herd.stateColor(compact.herd.badgeState)
-        // A rim in the panel's own background keeps the badge apart from the
+        // A rim in the panel's own background keeps the mark apart from the
         // glyph it sits on.
         border.width: 1
         border.color: Kirigami.Theme.backgroundColor
@@ -63,10 +70,11 @@ MouseArea {
         PlasmaComponents3.Label {
             id: countLabel
             anchors.centerIn: parent
-            text: compact.herd.runningCount > 99 ? "99+" : compact.herd.runningCount
+            visible: badge.label !== ""
+            text: badge.label.length > 2 ? "99+" : badge.label
             textFormat: Text.PlainText
             color: Kirigami.Theme.backgroundColor
-            font.pixelSize: Math.max(Math.round(badge.height * 0.7), 7)
+            font.pixelSize: Math.max(Math.round(badge.height * 0.72), 7)
             font.bold: true
         }
     }

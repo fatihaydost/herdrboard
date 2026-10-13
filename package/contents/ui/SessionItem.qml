@@ -8,11 +8,11 @@ import org.kde.plasma.components as PlasmaComponents3
 
 import "logic.js" as Logic
 
-// One herdr session: a state dot, its name (bold when a window already shows
-// it), what its loudest agent is doing, every agent inside it, and two
-// buttons: open/focus, and kill (running) or delete (stopped). Clicking the
-// row opens the session; clicking an agent line lands on that agent.
-Item {
+// One herdr session, laid out as a section: a header line (name, a quiet hint,
+// a hairline, and the open / kill or delete buttons, which show on hover or
+// keyboard focus), then one row per agent. Clicking the header opens the
+// session; clicking an agent lands on it.
+ColumnLayout {
     id: row
 
     required property var modelData
@@ -21,140 +21,98 @@ Item {
     required property var view
 
     readonly property bool remote: modelData.remote === true
-    readonly property string sessionState: Logic.sessionState(modelData)
-    readonly property bool active: rowMouse.containsMouse || view.cursorOnSession(index)
+    readonly property bool hasWindow: (modelData.windowId || "") !== ""
     readonly property bool canKill: modelData.running && !remote
     readonly property bool canDelete: !modelData.running && !modelData.isDefault && !remote
+    readonly property string sharedWs: Logic.sharedWorkspace(modelData)
+    readonly property bool actionsShown: headerMouse.containsMouse || view.cursorOnSession(index)
+        || openButton.activeFocus || killButton.activeFocus || deleteButton.activeFocus
 
-    implicitHeight: content.implicitHeight + Kirigami.Units.smallSpacing * 2
-    opacity: herd.pending(modelData) ? 0.4 : 1
+    spacing: Math.round(Kirigami.Units.smallSpacing / 2)
+    opacity: herd.pending(modelData) ? 0.5 : 1
 
-    Rectangle {
-        anchors.fill: parent
-        radius: Kirigami.Units.cornerRadius
-        color: row.active ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent"
-    }
+    // ------------------------------------------------------------ header
 
-    MouseArea {
-        id: rowMouse
-        anchors.fill: parent
-        hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-        onClicked: row.herd.openSession(row.modelData)
-    }
+    Item {
+        Layout.fillWidth: true
+        implicitHeight: header.implicitHeight
 
-    RowLayout {
-        id: content
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.margins: Kirigami.Units.smallSpacing
-        spacing: Kirigami.Units.smallSpacing * 2
-
-        // The session's own state at a glance, from its loudest agent.
-        Rectangle {
-            Layout.alignment: Qt.AlignTop
-            Layout.topMargin: Math.round(nameLabel.implicitHeight / 2 - height / 2)
-            implicitWidth: Math.round(Kirigami.Units.smallSpacing * 2)
-            implicitHeight: implicitWidth
-            radius: width / 2
-            color: row.herd.stateColor(row.sessionState)
-            opacity: row.modelData.running ? 1 : 0.5
+        MouseArea {
+            id: headerMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: row.herd.openSession(row.modelData)
         }
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: Math.round(Kirigami.Units.smallSpacing / 2)
+        RowLayout {
+            id: header
+            anchors.left: parent.left
+            anchors.right: parent.right
+            spacing: Kirigami.Units.smallSpacing
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Kirigami.Units.smallSpacing
-
-                PlasmaComponents3.Label {
-                    visible: text !== ""
-                    text: Logic.machineName(row.modelData)
-                    textFormat: Text.PlainText
-                    opacity: 0.6
-                }
-
-                PlasmaComponents3.Label {
-                    id: nameLabel
-                    Layout.fillWidth: true
-                    text: row.modelData.isDefault && !row.remote ? i18n("Shared session") : Logic.sessionLabel(row.modelData)
-                    textFormat: Text.PlainText
-                    elide: Text.ElideRight
-                    // A session a window already shows is one you switch to;
-                    // one without still has to be opened.
-                    font.bold: (row.modelData.windowId || "") !== ""
-                    opacity: row.modelData.running ? 1 : 0.6
-                }
-
-                PlasmaComponents3.Label {
-                    readonly property string note: Logic.noteLabel(row.modelData)
-                    text: note !== "" ? note : Logic.countLabel(row.modelData)
-                    textFormat: Text.PlainText
-                    font: Kirigami.Theme.smallFont
-                    color: note !== "" ? row.herd.stateColor(row.sessionState) : Kirigami.Theme.disabledTextColor
-                }
-            }
-
-            // The server is running but its snapshot could not be read: say so
-            // on this row instead of showing it as empty.
             PlasmaComponents3.Label {
-                Layout.fillWidth: true
                 visible: text !== ""
-                text: row.modelData.error || ""
+                text: Logic.machineName(row.modelData)
                 textFormat: Text.PlainText
-                elide: Text.ElideRight
-                font: Kirigami.Theme.smallFont
-                color: Kirigami.Theme.negativeTextColor
+                opacity: 0.6
             }
 
             PlasmaComponents3.Label {
-                Layout.fillWidth: true
-                visible: text !== "" && !(row.modelData.error)
-                text: Logic.subtitleFor(row.modelData)
+                // Never squeezed below a readable stub; the hint gives way first.
+                Layout.minimumWidth: Math.min(implicitWidth, Kirigami.Units.gridUnit * 6)
+                Layout.preferredWidth: implicitWidth
+                text: row.modelData.isDefault && !row.remote ? i18n("Shared session") : Logic.sessionLabel(row.modelData)
                 textFormat: Text.PlainText
                 elide: Text.ElideRight
+                font.weight: Font.DemiBold
+                opacity: row.modelData.running ? 0.9 : 0.55
+            }
+
+            PlasmaComponents3.Label {
+                visible: text !== ""
+                text: Logic.sessionHint(row.modelData)
+                textFormat: Text.PlainText
+                elide: Text.ElideRight
+                Layout.minimumWidth: 0
+                Layout.preferredWidth: Math.min(implicitWidth, Kirigami.Units.gridUnit * 8)
                 font: Kirigami.Theme.smallFont
                 opacity: 0.6
             }
 
-            Repeater {
-                model: row.modelData.agentList || []
+            // The hairline that makes a header a section, as in Plasma's own
+            // list section headers.
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                Layout.leftMargin: Kirigami.Units.smallSpacing
+                implicitHeight: 1
+                color: Kirigami.Theme.textColor
+                opacity: 0.15
+            }
 
-                delegate: AgentItem {
-                    Layout.fillWidth: true
-                    herd: row.herd
-                    view: row.view
-                    session: row.modelData
-                    sessionIndex: row.index
+            PlasmaComponents3.Label {
+                visible: text !== ""
+                text: i18n(Logic.sessionMeta(row.modelData))
+                textFormat: Text.PlainText
+                font: Kirigami.Theme.smallFont
+                color: Kirigami.Theme.disabledTextColor
+            }
+
+            RowLayout {
+                spacing: 0
+                opacity: row.actionsShown ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: Kirigami.Units.shortDuration } }
+
+                IconButton {
+                    id: openButton
+                    iconSource: row.hasWindow ? "go-jump-symbolic" : "window-new-symbolic"
+                    text: row.hasWindow ? i18n("Show this session's window (O)") : i18n("Open this session (O)")
+                    onClicked: row.herd.openSession(row.modelData)
                 }
-            }
-        }
-
-        // Faint until the row is under the pointer or the cursor.
-        RowLayout {
-            Layout.alignment: Qt.AlignTop
-            spacing: 0
-            opacity: row.active ? 1 : 0.35
-
-            IconButton {
-                iconSource: "window-new-symbolic"
-                text: (row.modelData.windowId || "") !== "" ? i18n("Focus this session (O)") : i18n("Open this session (O)")
-                onClicked: row.herd.openSession(row.modelData)
-            }
-
-            // One destructive slot: a running server is killed, a stopped
-            // session deleted, never both. Remote rows leave it empty, and so
-            // does the stopped shared session.
-            Item {
-                implicitWidth: killButton.implicitWidth
-                implicitHeight: killButton.implicitHeight
 
                 IconButton {
                     id: killButton
-                    anchors.fill: parent
                     visible: row.canKill
                     iconSource: Qt.resolvedUrl("../icons/herdboard-kill-symbolic.svg")
                     hoverColor: Kirigami.Theme.negativeTextColor
@@ -163,7 +121,7 @@ Item {
                 }
 
                 IconButton {
-                    anchors.fill: parent
+                    id: deleteButton
                     visible: row.canDelete
                     iconSource: "edit-delete-symbolic"
                     hoverColor: Kirigami.Theme.negativeTextColor
@@ -171,6 +129,46 @@ Item {
                     onClicked: row.herd.removeSession(row.modelData)
                 }
             }
+        }
+    }
+
+    // ------------------------------------------------------------ body
+
+    // A running server whose snapshot could not be read says so here.
+    PlasmaComponents3.Label {
+        Layout.fillWidth: true
+        Layout.leftMargin: Kirigami.Units.smallSpacing
+        visible: text !== ""
+        text: row.modelData.error || ""
+        textFormat: Text.PlainText
+        elide: Text.ElideRight
+        font: Kirigami.Theme.smallFont
+        color: Kirigami.Theme.negativeTextColor
+    }
+
+    // A stopped session names what it saved, so it can be told apart from a
+    // name left over from an afternoon.
+    PlasmaComponents3.Label {
+        Layout.fillWidth: true
+        Layout.leftMargin: Kirigami.Units.smallSpacing
+        visible: text !== "" && !row.modelData.error
+        text: Logic.subtitleFor(row.modelData)
+        textFormat: Text.PlainText
+        elide: Text.ElideRight
+        font: Kirigami.Theme.smallFont
+        opacity: 0.6
+    }
+
+    Repeater {
+        model: row.modelData.agentList || []
+
+        delegate: AgentItem {
+            Layout.fillWidth: true
+            herd: row.herd
+            view: row.view
+            session: row.modelData
+            sessionIndex: row.index
+            omitWorkspace: row.sharedWs !== ""
         }
     }
 }

@@ -235,3 +235,59 @@ function richEscape(text) {
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
 }
+
+// The workspace every agent in a session sits in, when they all share one
+// (and there is at least one agent): then it is said once, on the session's
+// header, instead of on every row.
+function sharedWorkspace(session) {
+    const agents = (session && session.agentList) || [];
+    if (agents.length === 0) return "";
+    const ws = agents[0].workspace || "";
+    for (let i = 1; i < agents.length; i++)
+        if ((agents[i].workspace || "") !== ws) return "";
+    return ws;
+}
+
+// An agent's quiet second line: its kind, then where it sits. The workspace is
+// left out when the session header already names it.
+function agentDetail(agent, omitWorkspace) {
+    if (!agent) return "";
+    const parts = [];
+    if (agent.kind) parts.push(agent.kind);
+    if (agent.workspace && !omitWorkspace) parts.push(agent.workspace);
+    if (agent.tab) parts.push(agent.tab);
+    return parts.join(" · ");
+}
+
+// The dim hint after a session's name: herdr's own name for the shared session,
+// and the workspace its agents share.
+function sessionHint(session) {
+    if (!session) return "";
+    const parts = [];
+    if (session.isDefault && session.remote !== true) parts.push("default");
+    const ws = sharedWorkspace(session);
+    if (ws) parts.push(ws);
+    return parts.join(" · ");
+}
+
+// What the session header says on its right, when its agents are not already
+// saying it.
+function sessionMeta(session) {
+    if (!session) return "";
+    if (!session.running) return "stopped";
+    if ((session.agentList || []).length === 0 && !session.error) return "no agents";
+    return "";
+}
+
+// The badge's text: a number only when agents wait on you (the one count worth
+// reading at 22 px); a plain dot for done and working.
+function badgeText(counts) {
+    return badgeState(counts) === "blocked" ? String(counts.blocked) : "";
+}
+
+// Nothing to list: no server running and no named session saved.
+function herdEmpty(sessions) {
+    for (let i = 0; i < (sessions || []).length; i++)
+        if (sessions[i].running || !sessions[i].isDefault) return false;
+    return true;
+}

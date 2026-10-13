@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls
 
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.components as PlasmaComponents3
@@ -29,12 +30,14 @@ PlasmaExtras.Representation {
 
     readonly property var rows: Logic.navRows(herd.sessions)
     readonly property string unreachable: Logic.unreachableText(herd.machines)
+    readonly property bool notInstalled: herd.errorText === "herdr is not installed"
 
+    // A fixed size, as Plasma's own tray applets use: the popup does not
+    // resize under the pointer every time an agent appears or finishes.
     Layout.minimumWidth: Kirigami.Units.gridUnit * 18
-    Layout.preferredWidth: Kirigami.Units.gridUnit * 23
-    Layout.minimumHeight: Kirigami.Units.gridUnit * 8
-    Layout.preferredHeight: Math.min(Kirigami.Units.gridUnit * 30,
-                                     Math.max(Kirigami.Units.gridUnit * 8, list.contentHeight + messages.implicitHeight + Kirigami.Units.gridUnit * 3))
+    Layout.preferredWidth: Kirigami.Units.gridUnit * 24
+    Layout.minimumHeight: Kirigami.Units.gridUnit * 12
+    Layout.preferredHeight: Kirigami.Units.gridUnit * 24
 
     collapseMarginsHint: true
     focus: true
@@ -122,35 +125,10 @@ PlasmaExtras.Representation {
         }
     }
 
-    header: PlasmaExtras.PlasmoidHeading {
-        RowLayout {
-            anchors.fill: parent
-            spacing: Kirigami.Units.smallSpacing
-
-            PlasmaExtras.Heading {
-                Layout.fillWidth: true
-                Layout.leftMargin: Kirigami.Units.smallSpacing
-                level: 5
-                elide: Text.ElideRight
-                textFormat: Text.PlainText
-                text: !full.herd.loaded ? "" : i18n("herdr · %1 · %2",
-                                                    i18np("%1 server", "%1 servers", full.herd.runningCount),
-                                                    i18np("%1 agent", "%1 agents", full.herd.agentCount))
-            }
-
-            PlasmaComponents3.ToolButton {
-                icon.name: "view-refresh-symbolic"
-                icon.width: Kirigami.Units.iconSizes.small
-                icon.height: Kirigami.Units.iconSizes.small
-                display: PlasmaComponents3.AbstractButton.IconOnly
-                text: i18n("Refresh")
-                onClicked: full.herd.refresh()
-                PlasmaComponents3.ToolTip.text: i18n("Refresh (R)")
-                PlasmaComponents3.ToolTip.visible: hovered
-                PlasmaComponents3.ToolTip.delay: Kirigami.Units.toolTipDelay
-            }
-        }
-    }
+    // In the system tray the tray draws the heading (title, refresh from the
+    // contextual actions, configure, pin), and this one hides itself; on the
+    // desktop it shows the title and the same actions. Plasma's own pattern.
+    header: PlasmaExtras.BasicPlasmoidHeading {}
 
     contentItem: Item {
         // Holds the list's keys; the dialog takes focus while it is open.
@@ -212,20 +190,13 @@ PlasmaExtras.Representation {
                     Layout.fillWidth: true
                     spacing: 0
 
-                    // InlineMessage renders rich text, so the error goes in escaped.
-                    Kirigami.InlineMessage {
-                        Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.smallSpacing
-                        visible: !full.herd.reachable
-                        type: Kirigami.MessageType.Error
-                        text: Logic.richEscape(full.herd.errorText !== "" ? full.herd.errorText : i18n("Could not reach herdr."))
-                    }
-
                     // A machine that is down has no rows of its own; without this
                     // line it would vanish silently.
                     PlasmaComponents3.Label {
                         Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.smallSpacing
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        Layout.topMargin: Kirigami.Units.largeSpacing
                         visible: full.unreachable !== ""
                         text: full.unreachable
                         textFormat: Text.PlainText
@@ -235,34 +206,71 @@ PlasmaExtras.Representation {
                     }
                 }
 
+                // One sentence and one way forward for each state with nothing
+                // to list.
                 PlasmaExtras.PlaceholderMessage {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Layout.margins: Kirigami.Units.gridUnit
-                    visible: full.herd.loaded && full.herd.reachable && full.herd.sessions.length === 0
+                    visible: full.herd.loaded && !full.herd.reachable && full.notInstalled
                     iconName: "utilities-terminal"
-                    text: i18n("No herdr sessions")
+                    text: i18n("herdr is not installed")
+                    helpfulAction: Action {
+                        icon.name: "internet-services"
+                        text: i18n("Get herdr")
+                        onTriggered: Qt.openUrlExternally("https://herdr.dev")
+                    }
+                }
+
+                PlasmaExtras.PlaceholderMessage {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.margins: Kirigami.Units.gridUnit
+                    visible: full.herd.loaded && !full.herd.reachable && !full.notInstalled
+                    iconName: "dialog-warning"
+                    text: i18n("Cannot reach herdr")
+                    explanation: full.herd.errorText
+                    helpfulAction: Action {
+                        icon.name: "view-refresh"
+                        text: i18n("Try Again")
+                        onTriggered: full.herd.refresh()
+                    }
+                }
+
+                PlasmaExtras.PlaceholderMessage {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.margins: Kirigami.Units.gridUnit
+                    visible: full.herd.loaded && full.herd.reachable && Logic.herdEmpty(full.herd.sessions)
+                    iconName: "utilities-terminal"
+                    text: i18n("No herdr server is running")
+                    helpfulAction: Action {
+                        icon.name: "list-add"
+                        text: i18n("New Session")
+                        onTriggered: full.herd.openSession({ name: "default", isDefault: true, running: false, remote: false })
+                    }
                 }
 
                 PlasmaComponents3.ScrollView {
                     id: scroll
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    visible: full.herd.sessions.length > 0
+                    visible: full.herd.reachable && !Logic.herdEmpty(full.herd.sessions)
                     PlasmaComponents3.ScrollBar.horizontal.policy: PlasmaComponents3.ScrollBar.AlwaysOff
 
                     ListView {
                         id: list
                         clip: true
                         model: full.herd.sessions
-                        spacing: Math.round(Kirigami.Units.smallSpacing / 2)
+                        // Sessions breathe apart more than the agents inside one.
+                        spacing: Kirigami.Units.largeSpacing * 2
                         boundsBehavior: Flickable.StopAtBounds
-                        topMargin: Kirigami.Units.smallSpacing
-                        bottomMargin: Kirigami.Units.smallSpacing
+                        topMargin: Kirigami.Units.largeSpacing
+                        bottomMargin: Kirigami.Units.largeSpacing
 
                         delegate: SessionItem {
-                            width: ListView.view.width - Kirigami.Units.smallSpacing * 2
-                            x: Kirigami.Units.smallSpacing
+                            width: ListView.view.width - Kirigami.Units.largeSpacing * 2
+                            x: Kirigami.Units.largeSpacing
                             herd: full.herd
                             view: full
                         }

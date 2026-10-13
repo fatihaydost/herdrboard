@@ -57,6 +57,9 @@ PlasmoidItem {
     readonly property string badgeState: Logic.badgeState({
         running: runningCount, blocked: blockedCount, done: doneCount, working: workingCount
     })
+    readonly property string badgeCount: Logic.badgeText({
+        running: runningCount, blocked: blockedCount, done: doneCount, working: workingCount
+    })
 
     function stateColor(state) {
         if (state === "blocked")

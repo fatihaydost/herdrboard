@@ -10,7 +10,7 @@ const { execFileSync } = require("child_process");
 const src = fs.readFileSync(path.join(__dirname, "../package/contents/ui/logic.js"), "utf8")
     .replace(/^\.pragma library\s*$/m, "");
 const L = {};
-vm.runInNewContext(src + "\nObject.assign(out, {shellQuote, validName, validPane, validMachine, actionCommand, rowKey, agentKey, attentionRank, agentWants, sessionState, badgeState, agentNote, noteLabel, countLabel, sessionLabel, machineName, subtitleFor, cleanTitle, agentPlace, unreachableText, navRows, bestRow, attention, richEscape});", { out: L });
+vm.runInNewContext(src + "\nObject.assign(out, {shellQuote, validName, validPane, validMachine, actionCommand, rowKey, agentKey, attentionRank, agentWants, sessionState, badgeState, agentNote, noteLabel, countLabel, sessionLabel, machineName, subtitleFor, cleanTitle, agentPlace, unreachableText, navRows, bestRow, attention, richEscape, sharedWorkspace, agentDetail, sessionHint, sessionMeta, badgeText, herdEmpty});", { out: L });
 
 let n = 0;
 function test(name, fn) {
@@ -121,6 +121,25 @@ test("attention: only what started asking since the last poll", () => {
 
 test("richEscape", () => {
     assert.strictEqual(L.richEscape("<img src=\"http://x\">&'"), "&lt;img src=&quot;http://x&quot;&gt;&amp;&#39;");
+});
+
+test("redesign helpers", () => {
+    const s = { name: "default", isDefault: true, running: true, agentList: [{ workspace: "checkout-service", kind: "claude", tab: "" }, { workspace: "checkout-service", kind: "claude", tab: "3" }] };
+    assert.strictEqual(L.sharedWorkspace(s), "checkout-service");
+    assert.strictEqual(L.sessionHint(s), "default · checkout-service");
+    assert.strictEqual(L.agentDetail(s.agentList[1], true), "claude · 3");
+    assert.strictEqual(L.agentDetail(s.agentList[1], false), "claude · checkout-service · 3");
+    assert.strictEqual(L.agentDetail({ workspace: "api" }, false), "api");
+    assert.strictEqual(L.sharedWorkspace({ agentList: [{ workspace: "a" }, { workspace: "b" }] }), "");
+    assert.strictEqual(L.sessionHint({ name: "x", agentList: [] }), "");
+    assert.strictEqual(L.sessionMeta({ running: false }), "stopped");
+    assert.strictEqual(L.sessionMeta({ running: true, agentList: [] }), "no agents");
+    assert.strictEqual(L.sessionMeta({ running: true, agentList: [], error: "x" }), "");
+    assert.strictEqual(L.badgeText({ running: 1, blocked: 3, done: 1 }), "3");
+    assert.strictEqual(L.badgeText({ running: 1, done: 2 }), "");
+    assert.ok(L.herdEmpty([{ name: "default", isDefault: true, running: false }]));
+    assert.ok(!L.herdEmpty([{ name: "default", isDefault: true, running: true }]));
+    assert.ok(!L.herdEmpty([{ name: "old", running: false }]));
 });
 
 console.log("all", n, "tests passed");
