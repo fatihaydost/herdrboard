@@ -206,7 +206,7 @@ kwin_script() {
     local i
     for ((i = 0; i < 40; i++)); do
       out=$(journalctl --user --quiet --no-pager -o cat --since "@$since" \
-              _COMM=kwin_wayland QT_CATEGORY=js 2>/dev/null |
+              _COMM=kwin_wayland _COMM=kwin_x11 QT_CATEGORY=js 2>/dev/null |
             grep -F -m1 -- "$tag " | head -c "$((WINDOWS_BYTE_CAP + 1))") || true
       [[ -n $out ]] && break
       sleep 0.05
@@ -566,7 +566,7 @@ remote_floor_met() {
 machine_rows() {
   local mid="$1" msession="$2" errlog="$3" out
   valid_session_name "$msession" || return 1
-  out=$(timeout --signal=TERM 45 herdr --machine "$mid" api snapshot \
+  out=$(timeout --signal=TERM 10 herdr --machine "$mid" api snapshot \
     2>"$errlog" < /dev/null | head -c "$((SNAPSHOT_BYTE_CAP + 1))") || true
   [[ -n $out ]] || return 1
   over_byte_cap "$out" "$SNAPSHOT_BYTE_CAP" && return 1

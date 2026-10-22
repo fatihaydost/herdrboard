@@ -10,7 +10,7 @@ const { execFileSync } = require("child_process");
 const src = fs.readFileSync(path.join(__dirname, "../package/contents/ui/logic.js"), "utf8")
     .replace(/^\.pragma library\s*$/m, "");
 const L = {};
-vm.runInNewContext(src + "\nObject.assign(out, {shellQuote, validName, validPane, validMachine, actionCommand, rowKey, agentKey, attentionRank, agentWants, sessionState, badgeState, agentNote, noteLabel, countLabel, sessionLabel, machineName, subtitleFor, cleanTitle, agentPlace, unreachableText, navRows, bestRow, attention, richEscape, sharedWorkspace, agentDetail, sessionHint, sessionMeta, badgeText, herdEmpty});", { out: L });
+vm.runInNewContext(src + "\nObject.assign(out, {shellQuote, validName, validPane, validMachine, actionCommand, rowKey, agentKey, attentionRank, agentWants, badgeState, agentNote, sessionLabel, machineName, subtitleFor, cleanTitle, unreachableText, navRows, bestRow, attention, sharedWorkspace, agentDetail, sessionHint, sessionMeta, badgeText, herdEmpty});", { out: L });
 
 let n = 0;
 function test(name, fn) {
@@ -47,11 +47,6 @@ test("actionCommand quotes everything and refuses bad shapes", () => {
 });
 
 test("states: waiting beats finished beats busy", () => {
-    assert.strictEqual(L.sessionState({ running: false, blocked: 3 }), "stopped");
-    assert.strictEqual(L.sessionState({ running: true, blocked: 1, done: 2, working: 3 }), "blocked");
-    assert.strictEqual(L.sessionState({ running: true, done: 2, working: 3 }), "done");
-    assert.strictEqual(L.sessionState({ running: true, working: 3 }), "working");
-    assert.strictEqual(L.sessionState({ running: true }), "idle");
     assert.ok(L.attentionRank("blocked") < L.attentionRank("done"));
     assert.ok(L.attentionRank("done") < L.attentionRank("working"));
     assert.ok(L.attentionRank("working") < L.attentionRank("idle"));
@@ -69,12 +64,6 @@ test("badge: none when idle or nothing running", () => {
 test("labels", () => {
     assert.strictEqual(L.agentNote("idle"), "ready");
     assert.strictEqual(L.agentNote("blocked"), "needs you");
-    assert.strictEqual(L.noteLabel({ running: true, blocked: 2, done: 1 }), "2 needs you");
-    assert.strictEqual(L.noteLabel({ running: true }), "");
-    assert.strictEqual(L.countLabel({ running: false }), "stopped");
-    assert.strictEqual(L.countLabel({ running: true, agents: 0 }), "no agents");
-    assert.strictEqual(L.countLabel({ running: true, agents: 1 }), "1 agent");
-    assert.strictEqual(L.countLabel({ running: true, agents: 4 }), "4 agents");
     assert.strictEqual(L.sessionLabel({ name: "default", isDefault: true }), "Shared session");
     assert.strictEqual(L.sessionLabel({ name: "default", isDefault: true, remote: true, machineLabel: "box" }), "box");
     // Numbered sessions are just names here: no workspace mapping.
@@ -87,8 +76,6 @@ test("labels", () => {
     assert.strictEqual(L.subtitleFor({ running: true, projects: ["a"], agentList: [{}] }), "");
     assert.strictEqual(L.cleanTitle("⠋ Building the thing"), "Building the thing");
     assert.strictEqual(L.cleanTitle("✳✳"), "✳✳");
-    assert.strictEqual(L.agentPlace({ workspace: "api", tab: "" }), "api");
-    assert.strictEqual(L.agentPlace({ workspace: "api", tab: "Tests" }), "api  ·  Tests");
     assert.strictEqual(L.unreachableText([{ ok: true }]), "");
     assert.strictEqual(L.unreachableText([{ ok: false, label: "gpu", error: "unreachable" }, { ok: false, id: "m3", error: "Host key" }]), "unreachable: gpu, m3 (Host key)");
 });
@@ -117,10 +104,6 @@ test("attention: only what started asking since the last poll", () => {
     const third = L.attention(s("done", 7), second.wanting);
     assert.strictEqual(third.fresh, "");
     assert.notStrictEqual(L.rowKey({ name: "default", machineId: "m1" }), L.rowKey({ name: "default" }));
-});
-
-test("richEscape", () => {
-    assert.strictEqual(L.richEscape("<img src=\"http://x\">&'"), "&lt;img src=&quot;http://x&quot;&gt;&amp;&#39;");
 });
 
 test("redesign helpers", () => {

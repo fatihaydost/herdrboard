@@ -77,7 +77,7 @@ the others.
 
 ## How it finds windows
 
-Plasma on Wayland gives no shell access to the window list, so Herdboard asks
+Plasma gives no shell access to the window list, so Herdboard asks
 KWin: it loads a small KWin script over D-Bus
 (`org.kde.KWin /Scripting loadScript`), runs it, and the script prints each
 window's process id and window id (never titles) to KWin's log, which is read

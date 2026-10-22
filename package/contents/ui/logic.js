@@ -66,16 +66,6 @@ function agentWants(status) {
     return status === "blocked" || status === "done";
 }
 
-// One state for a session row, from its counts: "blocked", "done", "working",
-// "idle", or "stopped".
-function sessionState(session) {
-    if (!session || !session.running) return "stopped";
-    if ((session.blocked || 0) > 0) return "blocked";
-    if ((session.done || 0) > 0) return "done";
-    if ((session.working || 0) > 0) return "working";
-    return "idle";
-}
-
 // The tray badge: "" (no badge: nothing is running or every agent is idle),
 // otherwise the loudest state across the herd.
 function badgeState(counts) {
@@ -94,23 +84,6 @@ function agentNote(status) {
     if (status === "working") return "working";
     if (status === "idle") return "ready";
     return "unknown";
-}
-
-// The coloured word on a session row's first line, or "".
-function noteLabel(session) {
-    if (!session || !session.running) return "";
-    if ((session.blocked || 0) > 0) return session.blocked + " needs you";
-    if ((session.done || 0) > 0) return session.done + " done";
-    if ((session.working || 0) > 0) return session.working + " working";
-    return "";
-}
-
-function countLabel(session) {
-    if (!session) return "";
-    if (!session.running) return "stopped";
-    const n = session.agents || 0;
-    if (n === 0) return "no agents";
-    return n === 1 ? "1 agent" : n + " agents";
 }
 
 // herdr's own name for the shared session reads like a setting rather than a
@@ -145,15 +118,6 @@ function cleanTitle(title) {
     const s = String(title || "").trim();
     const stripped = s.replace(/^[^0-9A-Za-zÀ-ɏ]+/, "").trim();
     return stripped !== "" ? stripped : s;
-}
-
-// Where an agent sits: workspace, then tab, whichever exist.
-function agentPlace(agent) {
-    if (!agent) return "";
-    const parts = [];
-    if (agent.workspace) parts.push(agent.workspace);
-    if (agent.tab) parts.push(agent.tab);
-    return parts.join("  ·  ");
 }
 
 // The machines that did not answer the last poll, as one line, or "".
@@ -223,17 +187,6 @@ function attention(sessions, before) {
         }
     }
     return { wanting: wanting, fresh: fresh ? fresh.key : "" };
-}
-
-// For the one place that renders rich text (Kirigami.InlineMessage): every
-// character that could start markup becomes an entity.
-function richEscape(text) {
-    return String(text || "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
 }
 
 // The workspace every agent in a session sits in, when they all share one
