@@ -22,7 +22,8 @@ click away.
 
 ## What it shows
 
-The tray icon carries a small corner mark. It is **red with a number** when
+The icon is a pen of four panes, three holding an agent; its empty pane holds
+a small mark. It is **red with a number** when
 agents are waiting on an answer (the number is how many), a **green dot** when
 work finished while you were looking elsewhere, and an **amber dot** while
 something is still running. When every agent is idle there is no mark. Server
@@ -72,12 +73,15 @@ configure and pin buttons; Herdrboard draws no second header there.
   **Cancel** as well. The shared `default` session is never deleted from here.
 - `Up`/`Down` walk the agents, `R` refreshes, and so does a middle click on the
   tray icon.
+- When an action fails (no terminal found, a server already gone), the reason
+  stays at the top of the popup until your next action.
 
 <img src="docs/kill-dialog.png" alt="The kill confirmation, with Cancel focused" width="400">
 
 The list refreshes every 3 seconds while the popup is open. Closed, it refreshes
 every 5 seconds while the badge is showing something and every 20 seconds when
-everything is idle. Every local herdr call has a 5 second timeout, and a server
+everything is idle. Every local herdr call has a 5 second timeout and servers
+are asked in parallel, so a wedged one costs one timeout, not one each; a server
 whose snapshot cannot be read gets an error on its own row instead of zeroing
 the others.
 
@@ -92,14 +96,14 @@ unloaded. Each herdr client process is walked up the process tree until a
 window's process id turns up. Raising a window is the same trick with
 `workspace.activeWindow = window`.
 
-A round trip takes about 35 ms and leaves one line in the journal. It only
+A round trip takes about 40 ms and leaves one line in the journal. It only
 runs while the popup is open or when you open a session.
 
 A terminal that puts every window in one process (kitty `--single-instance`,
 Konsole's single-process mode) gives several windows the same process id. Those
 windows are skipped rather than guessed at: the session's open button does not
-offer to show its window, and opening it starts another window. Plain `kitty` and Konsole (which Herdrboard
-starts with `--separate`) are matched normally.
+offer to show its window, and opening it starts another window. Plain `kitty`
+and Konsole (which Herdrboard starts with `--separate`) are matched normally.
 
 ## Remote machines
 
@@ -146,7 +150,7 @@ Every action is a no-op while it is on.
 
 ```bash
 node tests/logic.test.js                                  # pure helpers
-bash tests/script.test.sh                                 # data script, stub herdr
+bash tests/script.test.sh                                 # data script, stub herdr (needs perl)
 /usr/lib/qt6/bin/qmllint -I /usr/lib/qt6/qml package/contents/ui/*.qml
 package/contents/scripts/herdrboard-sessions list | jq .   # the data the widget draws
 ./build.sh                                                # herdrboard.plasmoid
