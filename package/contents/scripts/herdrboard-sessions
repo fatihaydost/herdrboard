@@ -1,5 +1,5 @@
 #!/bin/bash
-# herdboard-sessions: everything the Herdboard widget needs to know about
+# herdrboard-sessions: everything the Herdrboard widget needs to know about
 # herdr, as one JSON object per call.
 #
 #   list [--no-windows]
@@ -53,9 +53,9 @@ export LC_ALL=C
 unset HERDR_ENV HERDR_SOCKET_PATH HERDR_PANE_ID HERDR_TAB_ID HERDR_WORKSPACE_ID
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/herdboard"
+readonly CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/herdrboard"
 readonly DEMO_FILE="$CACHE_DIR/demo"
-readonly RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}/herdboard-$(id -u)"
+readonly RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}/herdrboard-$(id -u)"
 
 # Ceilings on what another process may hand this script. The widget polls it
 # every few seconds for as long as Plasma runs, so the other side must not
@@ -110,7 +110,7 @@ private_dir() {
   [[ $owner == "$(id -u)" ]] || return 1
   chmod 700 -- "$dir" 2>/dev/null || return 1
   # Leftovers of a call that was killed before it could clean up.
-  find "$dir" -mindepth 1 -maxdepth 1 -name 'herdboard-*.js' -mmin +1 -delete 2>/dev/null || true
+  find "$dir" -mindepth 1 -maxdepth 1 -name 'herdrboard-*.js' -mmin +1 -delete 2>/dev/null || true
   return 0
 }
 
@@ -191,7 +191,7 @@ kwin_script() {
   command -v journalctl >/dev/null 2>&1 || return 1
   private_dir "$RUNTIME_DIR" || return 1
 
-  local tag="herdboard-$$-$RANDOM$RANDOM"
+  local tag="herdrboard-$$-$RANDOM$RANDOM"
   local file="$RUNTIME_DIR/$tag.js"
   printf '%s\n' "${body//@TAG@/$tag}" > "$file" || return 1
 
@@ -335,7 +335,7 @@ parent_pid() {
 # konsole in single-process mode) gives several windows one pid, and the pid
 # alone cannot say which of them holds herdr. Such pids are skipped rather
 # than guessed at, so "open" starts a fresh window instead of raising the wrong
-# one. Windows Herdboard opens itself are started with `konsole --separate`.
+# one. Windows Herdrboard opens itself are started with `konsole --separate`.
 #
 # Prints "ssh-target<TAB>session<TAB>window-id" per line; the target is empty
 # for a local server.
@@ -426,7 +426,7 @@ readonly ROWS_JQ='
            isDefault: (.default // false),
            running: (.running // false),
            version: ($snap.version // ""),
-           error: (if (.running // false) then ($snapshots[$name].herdboardError // "") else "" end),
+           error: (if (.running // false) then ($snapshots[$name].herdrboardError // "") else "" end),
            agents: ($agents | length),
            working: ([$agents[] | select(.agent_status == "working")] | length),
            blocked: ([$agents[] | select(.agent_status == "blocked")] | length),
@@ -490,7 +490,7 @@ collect_sessions() {
          printf '%s' "$snap" | jq -e '.result.snapshot | objects' >/dev/null 2>&1; then
         snapshots+="${snapshots:+,}\"$name\":$snap"
       else
-        snapshots+="${snapshots:+,}\"$name\":{\"herdboardError\":\"no answer from this server\"}"
+        snapshots+="${snapshots:+,}\"$name\":{\"herdrboardError\":\"no answer from this server\"}"
       fi
       continue
     fi
@@ -819,18 +819,18 @@ show_session() {
 
   # `herdr --session <name>` attaches to a running server and starts one when
   # there is none, so one command covers both. `--remote` is the attach form
-  # for a session on another machine. Both arrive in herdboard-attach through
+  # for a session on another machine. Both arrive in herdrboard-attach through
   # the environment (see that file for why).
   local session_arg=""
   [[ $name == default ]] || session_arg=$name
 
   local -a launch=()
-  launch_argv "$SCRIPT_DIR/herdboard-attach" || return 1
+  launch_argv "$SCRIPT_DIR/herdrboard-attach" || return 1
 
   (
     umask "$INHERITED_UMASK"
     if [[ -n $INHERITED_LC_ALL_SET ]]; then export LC_ALL=$INHERITED_LC_ALL; else unset LC_ALL; fi
-    export HERDBOARD_REMOTE="$target" HERDBOARD_SESSION="$session_arg"
+    export HERDRBOARD_REMOTE="$target" HERDRBOARD_SESSION="$session_arg"
     cd "$HOME" && exec setsid "${launch[@]}"
   ) </dev/null >/dev/null 2>&1 &
   disown

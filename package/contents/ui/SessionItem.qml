@@ -114,7 +114,7 @@ ColumnLayout {
                 IconButton {
                     id: killButton
                     visible: row.canKill
-                    iconSource: Qt.resolvedUrl("../icons/herdboard-kill-symbolic.svg")
+                    iconSource: Qt.resolvedUrl("../icons/herdrboard-kill-symbolic.svg")
                     hoverColor: Kirigami.Theme.negativeTextColor
                     text: i18n("Kill this server (K)")
                     onClicked: row.view.askKill(row.modelData)

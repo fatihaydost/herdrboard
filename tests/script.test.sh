@@ -1,10 +1,10 @@
 #!/bin/bash
-# Tests for package/contents/scripts/herdboard-sessions. Run: bash tests/script.test.sh
+# Tests for package/contents/scripts/herdrboard-sessions. Run: bash tests/script.test.sh
 # Uses a stub `herdr` on PATH; never talks to a real herdr server or KWin.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT="${HERDBOARD_SCRIPT:-$HERE/../package/contents/scripts/herdboard-sessions}"
+SCRIPT="${HERDRBOARD_SCRIPT:-$HERE/../package/contents/scripts/herdrboard-sessions}"
 n=0
 fail=0
 ok() { n=$((n + 1)); echo "ok $n - $1"; }
@@ -103,23 +103,23 @@ argv_for() { # TerminalApplication TerminalService [drop-from-path...]
   for drop in "${@:3}"; do mv "$term/bin/$drop" "$term/bin/$drop.off"; done
   ( export PATH="$term/bin" XDG_CONFIG_HOME="$term/config" XDG_DATA_HOME="$term/data" XDG_DATA_DIRS="$term/none"
     source "$SCRIPT"; set +e
-    launch=(); launch_argv /p/herdboard-attach && printf '%s|' "${launch[@]}" )
+    launch=(); launch_argv /p/herdrboard-attach && printf '%s|' "${launch[@]}" )
   for drop in "${@:3}"; do mv "$term/bin/$drop.off" "$term/bin/$drop"; done
 }
 expect_argv() { # want got label
   if [[ $2 == "$1" ]]; then ok "terminal: $3"; else bad "terminal: $3: got [$2] want [$1]"; fi
 }
-expect_argv "kitty|--single-instance|bash|/p/herdboard-attach|" "$(argv_for 'kitty --single-instance' '')" "TerminalApplication with arguments, kitty runs the program directly"
-expect_argv "konsole|--separate|-e|bash|/p/herdboard-attach|" "$(argv_for 'konsole' '')" "konsole gets --separate and -e"
-expect_argv "wezterm|start|--|bash|/p/herdboard-attach|" "$(argv_for 'wezterm' '')" "wezterm start --"
-expect_argv "gnome-terminal|--|bash|/p/herdboard-attach|" "$(argv_for 'gnome-terminal' '')" "gnome-terminal --"
-expect_argv "foot|bash|/p/herdboard-attach|" "$(argv_for 'foot' '')" "foot direct"
-expect_argv "myterm|-e|bash|/p/herdboard-attach|" "$(argv_for 'myterm' '')" "unknown terminal gets -e"
-expect_argv "ghostty|--gtk-single-instance=false|-e|bash|/p/herdboard-attach|" "$(argv_for '' 'com.mitchellh.ghostty.desktop')" "TerminalService: Exec without field codes, ghostty -e"
-expect_argv "xdg-terminal-exec|bash|/p/herdboard-attach|" "$(argv_for 'notinstalled -x' 'quoted.desktop')" "missing app and quoted Exec fall through to xdg-terminal-exec"
-expect_argv "konsole|--separate|-e|bash|/p/herdboard-attach|" "$(argv_for '' '' xdg-terminal-exec)" "nothing set, no xdg-terminal-exec: konsole"
+expect_argv "kitty|--single-instance|bash|/p/herdrboard-attach|" "$(argv_for 'kitty --single-instance' '')" "TerminalApplication with arguments, kitty runs the program directly"
+expect_argv "konsole|--separate|-e|bash|/p/herdrboard-attach|" "$(argv_for 'konsole' '')" "konsole gets --separate and -e"
+expect_argv "wezterm|start|--|bash|/p/herdrboard-attach|" "$(argv_for 'wezterm' '')" "wezterm start --"
+expect_argv "gnome-terminal|--|bash|/p/herdrboard-attach|" "$(argv_for 'gnome-terminal' '')" "gnome-terminal --"
+expect_argv "foot|bash|/p/herdrboard-attach|" "$(argv_for 'foot' '')" "foot direct"
+expect_argv "myterm|-e|bash|/p/herdrboard-attach|" "$(argv_for 'myterm' '')" "unknown terminal gets -e"
+expect_argv "ghostty|--gtk-single-instance=false|-e|bash|/p/herdrboard-attach|" "$(argv_for '' 'com.mitchellh.ghostty.desktop')" "TerminalService: Exec without field codes, ghostty -e"
+expect_argv "xdg-terminal-exec|bash|/p/herdrboard-attach|" "$(argv_for 'notinstalled -x' 'quoted.desktop')" "missing app and quoted Exec fall through to xdg-terminal-exec"
+expect_argv "konsole|--separate|-e|bash|/p/herdrboard-attach|" "$(argv_for '' '' xdg-terminal-exec)" "nothing set, no xdg-terminal-exec: konsole"
 expect_argv "" "$(argv_for '' '' xdg-terminal-exec konsole)" "no terminal at all: launch_argv fails"
-expect_argv "xdg-terminal-exec|bash|/p/herdboard-attach|" "$(argv_for 'kitty; touch /tmp/pwned' '')" "a shell metacharacter stays in the word: \"kitty;\" is no command, nothing evaluated"
+expect_argv "xdg-terminal-exec|bash|/p/herdrboard-attach|" "$(argv_for 'kitty; touch /tmp/pwned' '')" "a shell metacharacter stays in the word: \"kitty;\" is no command, nothing evaluated"
 rm -rf -- "$term"
 
 # ------------------------------------------------ kill / delete (stub ss)

@@ -1,7 +1,7 @@
 .pragma library
 
 /*
- * Pure helpers for Herdboard: argument checks, the attention order, labels and
+ * Pure helpers for Herdrboard: argument checks, the attention order, labels and
  * the navigation list. Nothing in here touches QML or i18n, so it runs under
  * node (tests/logic.test.js).
  */

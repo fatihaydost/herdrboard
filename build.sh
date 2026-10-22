@@ -10,7 +10,7 @@ import json, pathlib, sys, zipfile
 root = pathlib.Path(sys.argv[1])
 src = root / "package"
 meta = json.loads((src / "metadata.json").read_text())["KPlugin"]
-out = root / "herdboard.plasmoid"
+out = root / "herdrboard.plasmoid"
 out.unlink(missing_ok=True)
 
 files = sorted(p for p in src.rglob("*") if p.is_file())

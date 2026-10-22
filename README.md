@@ -1,18 +1,18 @@
 <div align="center">
 
-# Herdboard
+# Herdrboard
 
 **[herdr](https://herdr.dev) in the KDE Plasma 6 system tray: every server and agent at a glance, one click to open or focus one.**
 
 ![Plasma 6](https://img.shields.io/badge/Plasma-6-1d99f3) ![License: MIT](https://img.shields.io/badge/license-MIT-green) ![Version](https://img.shields.io/badge/version-0.1.0-blue)
 
-<img src="docs/popup.png" alt="The Herdboard popup in a dark colour scheme, listing herdr sessions with the agents inside each" width="400"> <img src="docs/popup-light.png" alt="The same popup in Breeze Light" width="400">
+<img src="docs/popup.png" alt="The Herdrboard popup in a dark colour scheme, listing herdr sessions with the agents inside each" width="400"> <img src="docs/popup-light.png" alt="The same popup in Breeze Light" width="400">
 
 </div>
 
 herdr runs one server per named session. They are easy to start and never stop
 by themselves, because closing a window detaches rather than ends the session,
-so they pile up unseen. Herdboard puts the count in the tray and the list one
+so they pile up unseen. Herdrboard puts the count in the tray and the list one
 click away.
 
 ## What it shows
@@ -46,7 +46,7 @@ from your colour scheme. With nothing to show, the popup says so in one
 sentence with one action: *New Session*, *Try Again*, or *Get herdr*.
 
 In the system tray the tray's own header carries the title and the refresh,
-configure and pin buttons; Herdboard draws no second header there.
+configure and pin buttons; Herdrboard draws no second header there.
 
 ## What it does
 
@@ -77,7 +77,7 @@ the others.
 
 ## How it finds windows
 
-Plasma gives no shell access to the window list, so Herdboard asks
+Plasma gives no shell access to the window list, so Herdrboard asks
 KWin: it loads a small KWin script over D-Bus
 (`org.kde.KWin /Scripting loadScript`), runs it, and the script prints each
 window's process id and window id (never titles) to KWin's log, which is read
@@ -92,7 +92,7 @@ runs while the popup is open or when you open a session.
 A terminal that puts every window in one process (kitty `--single-instance`,
 Konsole's single-process mode) gives several windows the same process id. Those
 windows are skipped rather than guessed at: the session is not shown bold and
-opening it starts another window. Plain `kitty` and Konsole (which Herdboard
+opening it starts another window. Plain `kitty` and Konsole (which Herdrboard
 starts with `--separate`) are matched normally.
 
 ## Remote machines
@@ -107,15 +107,15 @@ stay local: remote rows offer neither.
 ## Install
 
 ```bash
-git clone https://github.com/fatihaydost/herdboard
-cd herdboard
+git clone https://github.com/fatihaydost/herdrboard
+cd herdrboard
 ./install.sh --reload
 ```
 
 `--reload` restarts plasmashell so a widget already in the tray picks up new
-code (herdr servers are not affected). Herdboard appears in the system tray; if
+code (herdr servers are not affected). Herdrboard appears in the system tray; if
 it does not, right-click the tray arrow → *Configure System Tray…* →
-*Entries* → *Herdboard* → *Always shown*.
+*Entries* → *Herdrboard* → *Always shown*.
 
 Requirements: Plasma 6, `herdr` and `jq`. `qdbus6` and `journalctl` find the
 window showing a session (without them every session looks windowless and a
@@ -129,9 +129,9 @@ for the skull, and windows open in your default terminal
 The data script has a demo mode, so a screenshot carries invented sessions:
 
 ```bash
-package/contents/scripts/herdboard-sessions demo on
+package/contents/scripts/herdrboard-sessions demo on
 # ... take the screenshot ...
-package/contents/scripts/herdboard-sessions demo off
+package/contents/scripts/herdrboard-sessions demo off
 ```
 
 Every action is a no-op while it is on.
@@ -142,15 +142,15 @@ Every action is a no-op while it is on.
 node tests/logic.test.js                                  # pure helpers
 bash tests/script.test.sh                                 # data script, stub herdr
 /usr/lib/qt6/bin/qmllint -I /usr/lib/qt6/qml package/contents/ui/*.qml
-package/contents/scripts/herdboard-sessions list | jq .   # the data the widget draws
-./build.sh                                                # herdboard.plasmoid
+package/contents/scripts/herdrboard-sessions list | jq .   # the data the widget draws
+./build.sh                                                # herdrboard.plasmoid
 ```
 
 ## Remove
 
 ```bash
-kpackagetool6 --type Plasma/Applet --remove io.github.fatihaydost.herdboard
-rm -rf ~/.cache/herdboard   # only exists if demo mode was used
+kpackagetool6 --type Plasma/Applet --remove io.github.fatihaydost.herdrboard
+rm -rf ~/.cache/herdrboard   # only exists if demo mode was used
 ```
 
 Your herdr sessions live in `~/.config/herdr/` and are untouched.

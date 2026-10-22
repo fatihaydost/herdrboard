@@ -19,7 +19,7 @@ MouseArea {
     hoverEnabled: true
     activeFocusOnTab: true
 
-    Accessible.name: i18n("Herdboard")
+    Accessible.name: i18n("Herdrboard")
     Accessible.description: compact.herd.toolTipSubText
     Accessible.role: Accessible.Button
 
@@ -38,7 +38,7 @@ MouseArea {
 
     Kirigami.Icon {
         anchors.fill: parent
-        source: Qt.resolvedUrl("../icons/herdboard-symbolic.svg")
+        source: Qt.resolvedUrl("../icons/herdrboard-symbolic.svg")
         isMask: true
         color: Kirigami.Theme.textColor
         active: compact.containsMouse

@@ -22,7 +22,7 @@ P5Support.DataSource {
 
     function run(script, callback) {
         _seq += 1;
-        const source = "bash -c " + Logic.shellQuote(script) + " herdboard-" + _token + "-" + _seq;
+        const source = "bash -c " + Logic.shellQuote(script) + " herdrboard-" + _token + "-" + _seq;
         if (typeof callback === "function")
             _callbacks[source] = callback;
         connectSource(source);

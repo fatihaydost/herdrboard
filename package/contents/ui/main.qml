@@ -11,7 +11,7 @@ import "logic.js" as Logic
 // herdr sessions in the system tray: how many servers are running, what every
 // agent inside them is doing, and one click to open or focus one.
 //
-// All the work is done by contents/scripts/herdboard-sessions, which prints
+// All the work is done by contents/scripts/herdrboard-sessions, which prints
 // JSON; this item polls it, holds the result and sends it commands.
 //
 // Session names, workspace labels and agent titles are external text, so every
@@ -23,9 +23,9 @@ PlasmoidItem {
     // answers that by bouncing the whole icon, which is too loud for "an agent
     // finished". The badge colour carries the signal instead.
     Plasmoid.status: PlasmaCore.Types.ActiveStatus
-    Plasmoid.icon: Qt.resolvedUrl("../icons/herdboard-symbolic.svg")
+    Plasmoid.icon: Qt.resolvedUrl("../icons/herdrboard-symbolic.svg")
 
-    readonly property string script: decodeURIComponent(Qt.resolvedUrl("../scripts/herdboard-sessions").toString().replace(/^file:\/\//, ""))
+    readonly property string script: decodeURIComponent(Qt.resolvedUrl("../scripts/herdrboard-sessions").toString().replace(/^file:\/\//, ""))
 
     // ------------------------------------------------------------- state
 
@@ -71,7 +71,7 @@ PlasmoidItem {
         return Kirigami.Theme.disabledTextColor;
     }
 
-    toolTipMainText: i18n("Herdboard")
+    toolTipMainText: i18n("Herdrboard")
     toolTipSubText: {
         if (!reachable)
             return errorText !== "" ? errorText : i18n("Could not reach herdr");
@@ -123,7 +123,7 @@ PlasmoidItem {
             data = JSON.parse(text);
         } catch (e) {
             reachable = false;
-            errorText = i18n("Unexpected output from herdboard-sessions");
+            errorText = i18n("Unexpected output from herdrboard-sessions");
             return;
         }
         reachable = data.ok === true;
@@ -193,9 +193,9 @@ PlasmoidItem {
             try {
                 const res = JSON.parse(stdout);
                 if (res.ok !== true && res.error)
-                    console.warn("herdboard:", action, "failed:", res.error);
+                    console.warn("herdrboard:", action, "failed:", res.error);
             } catch (e) {
-                console.warn("herdboard:", action, "gave unexpected output");
+                console.warn("herdrboard:", action, "gave unexpected output");
             }
             settleTimer.restart();
             if (queuedActions.length > 0) {

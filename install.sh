@@ -1,12 +1,12 @@
 #!/bin/bash
-# Install (or upgrade) Herdboard for the current user.
+# Install (or upgrade) Herdrboard for the current user.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ID="io.github.fatihaydost.herdboard"
+ID="io.github.fatihaydost.herdrboard"
 
 if ! command -v kpackagetool6 >/dev/null; then
-    echo "kpackagetool6 not found: Herdboard needs KDE Plasma 6." >&2
+    echo "kpackagetool6 not found: Herdrboard needs KDE Plasma 6." >&2
     exit 1
 fi
 
@@ -18,7 +18,7 @@ done
 command -v konsole >/dev/null 2>&1 || command -v xdg-terminal-exec >/dev/null 2>&1 || missing+=("konsole (or xdg-terminal-exec)")
 if (( ${#missing[@]} )); then
     echo "Warning: not found: ${missing[*]}" >&2
-    echo "Herdboard needs herdr and jq; ss is used to kill a server, qdbus6 + journalctl to find" >&2
+    echo "Herdrboard needs herdr and jq; ss is used to kill a server, qdbus6 + journalctl to find" >&2
     echo "the window showing a session, and konsole to open one." >&2
 fi
 
@@ -33,8 +33,8 @@ else
 fi
 
 echo
-echo "Done. Herdboard shows up in the system tray. If it does not:"
-echo "  right-click the tray arrow -> Configure System Tray... -> Entries -> Herdboard -> Always shown"
+echo "Done. Herdrboard shows up in the system tray. If it does not:"
+echo "  right-click the tray arrow -> Configure System Tray... -> Entries -> Herdrboard -> Always shown"
 echo
 
 # Plasma loads an applet's QML once and keeps it for the life of the shell, so
@@ -51,7 +51,7 @@ if [[ "${1:-}" == "--reload" ]]; then
     fi
     echo "Done."
 elif (( upgraded )); then
-    echo "A Herdboard already in your tray is still running the old code."
+    echo "A Herdrboard already in your tray is still running the old code."
     echo "Restart Plasma to pick this up  ->  ./install.sh --reload"
     echo "                              or  ->  systemctl --user restart plasma-plasmashell.service"
 fi
