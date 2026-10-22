@@ -55,7 +55,7 @@ unset HERDR_ENV HERDR_SOCKET_PATH HERDR_PANE_ID HERDR_TAB_ID HERDR_WORKSPACE_ID
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/herdrboard"
 readonly DEMO_FILE="$CACHE_DIR/demo"
-readonly RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}/herdrboard-$(id -u)"
+readonly RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}/herdrboard-$EUID"
 
 # Ceilings on what another process may hand this script. The widget polls it
 # every few seconds for as long as Plasma runs, so the other side must not
@@ -81,8 +81,9 @@ json_string() {
 # Whether a capped read came back at its ceiling (callers read cap+1 bytes, so
 # the extra byte is the evidence). Measured instead of read off an exit
 # status: under pipefail a `head` that closes early makes the pipeline fail.
+# ${#} counts bytes because LC_ALL=C is set above.
 over_byte_cap() {
-  [ "$(printf '%s' "$1" | wc -c)" -gt "$2" ]
+  (( ${#1} > $2 ))
 }
 
 # Names, pane ids, machine ids and targets all come back from the widget as
@@ -107,10 +108,11 @@ private_dir() {
   mkdir -p -m 700 -- "$dir" 2>/dev/null || true
   [[ -d $dir && ! -L $dir ]] || return 1
   owner="$(stat -c '%u' -- "$dir" 2>/dev/null)" || return 1
-  [[ $owner == "$(id -u)" ]] || return 1
+  [[ $owner == "$EUID" ]] || return 1
   chmod 700 -- "$dir" 2>/dev/null || return 1
   # Leftovers of a call that was killed before it could clean up.
-  find "$dir" -mindepth 1 -maxdepth 1 -name 'herdrboard-*.js' -mmin +1 -delete 2>/dev/null || true
+  find "$dir" -mindepth 1 -maxdepth 1 \( -name 'herdrboard-*.js' -o -name 'snap.*' -o -name 'list.*' \) \
+    -mmin +1 -exec rm -rf -- {} + 2>/dev/null || true
   return 0
 }
 
@@ -199,7 +201,7 @@ kwin_script() {
   # Killed half way (plasmashell restarting, say), the script would otherwise
   # stay loaded in KWin and its file stay on disk.
   trap '"$q" org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript "$tag" >/dev/null 2>&1; rm -f -- "$file"' EXIT INT TERM
-  since=$(( $(date +%s) - 1 ))
+  since=$(( EPOCHSECONDS - 1 ))
   id=$("$q" org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "$file" "$tag" 2>/dev/null) || id=""
   if [[ $id =~ ^[0-9]+$ ]]; then
     "$q" org.kde.KWin "/Scripting/Script$id" org.kde.kwin.Script.run >/dev/null 2>&1 || true
@@ -481,19 +483,44 @@ collect_sessions() {
   # session.json, which still names its workspaces: that is what makes a
   # stopped row say what it is holding.
   local snapshots='' saved='' name is_default running dir snap labels
-  local seen=0
+  local seen=0 tmpdir='' k
+  local -a names=() runs=() dirs=() pids=()
+  # Servers are asked in parallel, each answer in a file named by its position,
+  # so wedged servers cost one LOCAL_TIMEOUT per poll, not one each.
+  # shortcut: no limit on how many run at once (up to SESSION_COUNT_CAP, each
+  # answer up to SNAPSHOT_BYTE_CAP in RUNTIME_DIR); add one if anyone runs dozens.
   while IFS=$'\t' read -r name is_default running dir; do
     [[ -n $name ]] || continue
     valid_session_name "$name" || continue
     (( seen < SESSION_COUNT_CAP )) || continue
-    (( ${#snapshots} + ${#saved} <= TOTAL_BYTE_CAP )) || continue
-    seen=$(( seen + 1 ))
-
+    names[seen]=$name runs[seen]=$running dirs[seen]=$dir
     if [[ $running == true ]]; then
+      if [[ -z $tmpdir ]]; then
+        private_dir "$RUNTIME_DIR" || die "could not use the runtime directory"
+        tmpdir=$(mktemp -d "$RUNTIME_DIR/snap.XXXXXX") || die "could not use the runtime directory"
+        trap "rm -rf -- $(printf '%q' "$tmpdir")" EXIT
+      fi
+      (
+        snap=$(snapshot_for "$name" "$is_default") && is_one_snapshot "$snap" &&
+          printf '%s' "$snap" > "$tmpdir/$seen"
+      ) &
+      pids+=($!)
+    fi
+    seen=$(( seen + 1 ))
+  done < <(printf '%s' "$sessions_json" |
+    jq -r '.sessions[]? | "\(.name)\t\(.default // false)\t\(.running // false)\t\(.session_dir // "")"')
+  ((${#pids[@]} == 0)) || wait "${pids[@]}" 2>/dev/null || true
+
+  for k in "${!names[@]}"; do
+    name=${names[k]} dir=${dirs[k]}
+    (( ${#snapshots} + ${#saved} <= TOTAL_BYTE_CAP )) || continue
+
+    if [[ ${runs[k]} == true ]]; then
       # A server that does not answer, or answers with something that is not
       # a snapshot, gets an error on its own row; the others still count.
-      if snap=$(snapshot_for "$name" "$is_default") &&
-         is_one_snapshot "$snap"; then
+      snap=''
+      [[ -f $tmpdir/$k ]] && { IFS= read -r -d '' snap < "$tmpdir/$k" || true; }
+      if [[ -n $snap ]]; then
         snapshots+="${snapshots:+,}\"$name\":$snap"
       else
         snapshots+="${snapshots:+,}\"$name\":{\"herdrboardError\":\"no answer from this server\"}"
@@ -513,8 +540,7 @@ collect_sessions() {
                     | unique' -- "$dir/session.json" 2>/dev/null) || continue
     [[ -n $labels ]] || continue
     saved+="${saved:+,}\"$name\":$labels"
-  done < <(printf '%s' "$sessions_json" |
-    jq -r '.sessions[]? | "\(.name)\t\(.default // false)\t\(.running // false)\t\(.session_dir // "")"')
+  done
   snapshots="{$snapshots}"
   saved="{$saved}"
 
@@ -541,7 +567,7 @@ machine_list() {
           # `--machine` routing can reach.
           session: (.session // "default")}
        | select(.id != "" and .target != "")
-       | .label |= gsub("[\\t\\r\\n]+"; " ")]
+       | .label |= gsub("[[:cntrl:]]+"; " ")]
     end' 2>/dev/null || printf '[]'
 }
 
@@ -560,8 +586,9 @@ remote_floor_met() {
   local v
   v=$(hd --version 2>/dev/null) || return 1
   v=${v#herdr }
-  [[ $v =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
-  [[ $(printf '%s\n' "$v" 0.9.1 | sort -V | head -1) == 0.9.1 ]]
+  [[ $v =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || return 1
+  local a=$((10#${BASH_REMATCH[1]})) b=$((10#${BASH_REMATCH[2]})) c=$((10#${BASH_REMATCH[3]}))
+  (( a > 0 || b > 9 || (b == 9 && c >= 1) ))
 }
 
 # One machine's profile session, through the same ROWS_JQ as local rows behind
@@ -587,7 +614,7 @@ machine_error() {
   local errlog="$1" err
   err=$(sed -n 's/^Error: Custom { kind: [^,]*, error: "\(.*\)" }$/\1/p' \
     "$errlog" 2>/dev/null | head -1) || true
-  [[ -n $err ]] || err=$(tr '[:cntrl:]' ' ' < "$errlog" 2>/dev/null | head -c 200) || true
+  [[ -n $err ]] || err=$(tr '[:cntrl:]' ' ' 2>/dev/null < "$errlog" | head -c 200) || true
   err=${err%$'\n'}
   printf '%s' "${err:-unreachable}"
 }
@@ -618,6 +645,10 @@ cmd_list() {
 
   # Machines are asked in parallel, each answer in a file of its own, so a
   # stalled dial cannot hold the others hostage.
+  #
+  # Machine fields are split on \x1f, not tab: tab is IFS whitespace, so an
+  # empty label would collapse into the next field. Labels hold no control
+  # characters (machine_list), so \x1f cannot appear inside one.
   local remote='' status_tsv='' mid mlabel mtarget msession
   if [[ $machines_json != '[]' ]]; then
     private_dir "$RUNTIME_DIR" || die "could not use the runtime directory"
@@ -627,7 +658,7 @@ cmd_list() {
 
     if remote_floor_met; then
       local -a pids=()
-      while IFS=$'\t' read -r mid mlabel mtarget msession; do
+      while IFS=$'\x1f' read -r mid mlabel mtarget msession; do
         [[ -n $mid ]] || continue
         valid_machine_id "$mid" || continue
         valid_machine_target "$mtarget" || continue
@@ -641,18 +672,18 @@ cmd_list() {
           rm -f -- "$tmpdir/$mid.errlog"
         ) &
         pids+=($!)
-      done < <(printf '%s' "$machines_json" | jq -r '.[] | "\(.id)\t\(.label)\t\(.target)\t\(.session)"')
+      done < <(printf '%s' "$machines_json" | jq -r '.[] | "\(.id)\u001f\(.label)\u001f\(.target)\u001f\(.session)"')
       ((${#pids[@]} == 0)) || wait "${pids[@]}" 2>/dev/null || true
     else
-      while IFS=$'\t' read -r mid _ _ _; do
+      while IFS=$'\x1f' read -r mid _ _ _; do
         [[ -n $mid ]] || continue
         valid_machine_id "$mid" || continue
         printf 'needs herdr 0.9.1 or newer' > "$tmpdir/$mid.err"
-      done < <(printf '%s' "$machines_json" | jq -r '.[] | "\(.id)\t\(.label)\t\(.target)\t\(.session)"')
+      done < <(printf '%s' "$machines_json" | jq -r '.[] | "\(.id)\u001f\(.label)\u001f\(.target)\u001f\(.session)"')
     fi
 
     local err
-    while IFS=$'\t' read -r mid mlabel mtarget; do
+    while IFS=$'\x1f' read -r mid mlabel mtarget; do
       [[ -n $mid ]] || continue
       valid_machine_id "$mid" || continue
       if [[ -f $tmpdir/$mid.json ]]; then
@@ -663,7 +694,7 @@ cmd_list() {
         [[ -f $tmpdir/$mid.err ]] && err=$(tr '[:cntrl:]' ' ' < "$tmpdir/$mid.err")
         status_tsv+="$mid"$'\t'"$mlabel"$'\t'"$mtarget"$'\t0\t'"$err"$'\n'
       fi
-    done < <(printf '%s' "$machines_json" | jq -r '.[] | "\(.id)\t\(.label)\t\(.target)"')
+    done < <(printf '%s' "$machines_json" | jq -r '.[] | "\(.id)\u001f\(.label)\u001f\(.target)"')
   fi
   remote="{$remote}"
   printf '%s' "$remote" | jq -e . >/dev/null 2>&1 || remote='{}'

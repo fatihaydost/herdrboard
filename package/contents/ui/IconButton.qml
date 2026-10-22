@@ -11,8 +11,6 @@ PlasmaComponents3.ToolButton {
     property string iconSource: ""
     property color iconColor: Kirigami.Theme.textColor
     property color hoverColor: iconColor
-    // The keyboard cursor sits on this button.
-    property bool cursorOn: false
 
     display: PlasmaComponents3.AbstractButton.IconOnly
     Accessible.name: text
@@ -31,7 +29,7 @@ PlasmaComponents3.ToolButton {
             height: Kirigami.Units.iconSizes.small
             source: button.iconSource
             isMask: true
-            color: button.hovered || button.visualFocus || button.cursorOn ? button.hoverColor : button.iconColor
+            color: button.hovered || button.visualFocus ? button.hoverColor : button.iconColor
         }
     }
 }

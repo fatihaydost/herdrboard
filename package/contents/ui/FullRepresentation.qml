@@ -222,6 +222,19 @@ PlasmaExtras.Representation {
                         font: Kirigami.Theme.smallFont
                         color: Kirigami.Theme.negativeTextColor
                     }
+
+                    PlasmaComponents3.Label {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        Layout.topMargin: Kirigami.Units.largeSpacing
+                        visible: full.herd.actionError !== ""
+                        text: full.herd.actionError
+                        textFormat: Text.PlainText
+                        elide: Text.ElideRight
+                        font: Kirigami.Theme.smallFont
+                        color: Kirigami.Theme.negativeTextColor
+                    }
                 }
 
                 // One sentence and one way forward for each state with nothing

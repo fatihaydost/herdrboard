@@ -50,6 +50,9 @@ PlasmoidItem {
     // Requests that arrived while another action was running, run in order:
     // keeping only the latest let a confirmed kill vanish behind a later click.
     property var queuedActions: []
+    // Why the last action failed, for the popup: it has usually closed by the
+    // time the script answers, so a log line alone would go unseen.
+    property string actionError: ""
 
     // The agent that started asking since the previous poll blinks, so the
     // sound herdr played has a face. The first poll only sets the baseline.
@@ -197,16 +200,22 @@ PlasmoidItem {
         if (cmd === "")
             return;
         actionBusy = true;
+        actionError = "";
         pendingKey = Logic.rowKey(session);
         exec.run(cmd, (code, stdout, stderr) => {
             actionBusy = false;
             pendingKey = "";
+            let failure = "";
             try {
                 const res = JSON.parse(stdout);
-                if (res.ok !== true && res.error)
-                    console.warn("herdrboard:", action, "failed:", res.error);
+                if (res.ok !== true)
+                    failure = res.error || i18n("failed");
             } catch (e) {
-                console.warn("herdrboard:", action, "gave unexpected output");
+                failure = i18n("unexpected output");
+            }
+            if (failure !== "") {
+                console.warn("herdrboard:", action, "failed:", failure);
+                actionError = i18n("Could not %1 %2: %3", action, Logic.sessionLabel(session), failure);
             }
             settleTimer.restart();
             if (queuedActions.length > 0) {

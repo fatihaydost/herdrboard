@@ -12,13 +12,14 @@ fi
 
 missing=()
 command -v herdr >/dev/null 2>&1 || [[ -x $HOME/.local/bin/herdr ]] || missing+=(herdr)
-for c in jq ss qdbus6 journalctl; do
+for c in jq ss journalctl; do
     command -v "$c" >/dev/null 2>&1 || missing+=("$c")
 done
+command -v qdbus6 >/dev/null 2>&1 || command -v qdbus-qt6 >/dev/null 2>&1 || command -v qdbus >/dev/null 2>&1 || missing+=("qdbus6 (or qdbus-qt6, qdbus)")
 command -v konsole >/dev/null 2>&1 || command -v xdg-terminal-exec >/dev/null 2>&1 || missing+=("konsole (or xdg-terminal-exec)")
 if (( ${#missing[@]} )); then
     echo "Warning: not found: ${missing[*]}" >&2
-    echo "Herdrboard needs herdr and jq; ss is used to kill a server, qdbus6 + journalctl to find" >&2
+    echo "Herdrboard needs herdr and jq; ss is used to kill a server, qdbus + journalctl to find" >&2
     echo "the window showing a session, and konsole to open one." >&2
 fi
 

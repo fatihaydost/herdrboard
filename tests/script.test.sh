@@ -87,6 +87,28 @@ else
   bad "wedged herdr: took ${took}s, output $out"
 fi
 
+# ------------------------------------------- several wedged local servers
+# Asked one after another, three of these would cost three timeouts.
+cat > "$stub/herdr" <<'EOF'
+#!/bin/bash
+case "$*" in
+  "session list --json")
+    echo '{"sessions":[{"name":"default","default":true,"running":true},{"name":"a","running":true},{"name":"b","running":true}]}' ;;
+  "machine list --json") echo '[]' ;;
+  *snapshot) exec /usr/bin/sleep 30 ;;
+  *) exit 1 ;;
+esac
+EOF
+start=$(date +%s)
+out=$(PATH="$stub:$PATH" XDG_CACHE_HOME="$stub/cache" XDG_RUNTIME_DIR="$stub" bash "$SCRIPT" list --no-windows < /dev/null)
+took=$(( $(date +%s) - start ))
+if (( took <= 8 )) && [[ $(jq -c '[.sessions[] | .error]' <<<"$out") == '["no answer from this server","no answer from this server","no answer from this server"]' ]] &&
+   [[ -z $(find "$stub" -maxdepth 2 -name 'snap.*') ]]; then
+  ok "three wedged servers cost one timeout (${took}s), each row has its error, nothing left behind"
+else
+  bad "parallel snapshots: took ${took}s, output $out, left: $(find "$stub" -maxdepth 2 -name 'snap.*')"
+fi
+
 # ------------------------------- untitled agents, multi-document answers
 # Two documents where one is asked for: jq -e alone passes that, and the
 # spliced result would take every other row down with it.
@@ -118,29 +140,32 @@ else
 fi
 
 # ----------------------------------------------------- remote machines
-# One machine answers, one fails with herdr's wrapped error.
+# One machine answers, one fails with herdr's wrapped error, and one with an
+# empty label still answers under its own target.
 cat > "$stub/herdr" <<'EOF'
 #!/bin/bash
 case "$*" in
   "session list --json") echo '{"sessions":[{"name":"default","default":true,"running":true}]}' ;;
   "api snapshot") echo '{"result":{"snapshot":{"agents":[],"workspaces":[],"tabs":[]}}}' ;;
   "machine list --json")
-    echo '[{"id":"m1","label":"box one","target":"me@box1","enabled":true},{"id":"m2","label":"box two","target":"box2","enabled":true},{"id":"m3","target":"box3","enabled":false}]' ;;
+    echo '[{"id":"m1","label":"box one","target":"me@box1","enabled":true},{"id":"m2","label":"box two","target":"box2","enabled":true},{"id":"m3","target":"box3","enabled":false},{"id":"m4","label":"","target":"box4","enabled":true}]' ;;
   "--version") echo 'herdr 0.9.1' ;;
   "--machine m1 api snapshot")
     echo '{"result":{"snapshot":{"agents":[{"agent_status":"blocked","pane_id":"w1:p1","terminal_title":"far"}],"workspaces":[{"workspace_id":"w1","label":"remote-proj"}],"tabs":[]}}}' ;;
   "--machine m2 api snapshot")
     echo 'Error: Custom { kind: Other, error: "connection refused" }' >&2; exit 1 ;;
+  "--machine m4 api snapshot") echo '{"result":{"snapshot":{"agents":[],"workspaces":[],"tabs":[]}}}' ;;
   *) exit 1 ;;
 esac
 EOF
-out=$(PATH="$stub:$PATH" XDG_CACHE_HOME="$stub/cache" XDG_RUNTIME_DIR="$stub" bash "$SCRIPT" list --no-windows < /dev/null)
-got=$(jq -c '[.blocked, [.machines[] | [.id, .ok, .error]],
+out=$(PATH="$stub:$PATH" XDG_CACHE_HOME="$stub/cache" XDG_RUNTIME_DIR="$stub" bash "$SCRIPT" list --no-windows < /dev/null 2>"$stub/stderr")
+got=$(jq -c '[.blocked, [.machines[] | [.id, .ok, .error, .target]],
               [.sessions[] | select(.remote) | [.machineId, .machineLabel, .sshTarget, .agents, .projects]]]' <<<"$out" 2>/dev/null)
-if [[ $got == '[1,[["m1",true,""],["m2",false,"connection refused"]],[["m1","box one","me@box1",1,["remote-proj"]]]]' ]]; then
-  ok "remote: the answering machine adds its rows, the failing one only its error"
+if [[ $got == '[1,[["m1",true,"","me@box1"],["m2",false,"connection refused","box2"],["m4",true,"","box4"]],[["m4","","box4",0,[]],["m1","box one","me@box1",1,["remote-proj"]]]]' &&
+      ! -s $stub/stderr ]]; then
+  ok "remote: the answering machines add their rows (an empty label too), the failing one only its error"
 else
-  bad "remote machines: $got from $out"
+  bad "remote machines: $got from $out, stderr: $(cat "$stub/stderr")"
 fi
 
 # ------------------------------------------------- demo mode writes nothing

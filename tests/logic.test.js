@@ -131,6 +131,16 @@ test("attention: only what started asking since the last poll", () => {
     assert.notStrictEqual(L.rowKey({ name: "default", machineId: "m1" }), L.rowKey({ name: "default" }));
 });
 
+test("attention: needs-you beats done across servers whatever the seq", () => {
+    const local = { name: "a", agentList: [{ pane: "w1:p1", status: "blocked", seq: 3 }] };
+    const remote = { name: "b", machineId: "m1", agentList: [{ pane: "w1:p1", status: "done", seq: 40 }] };
+    assert.strictEqual(L.attention([local, remote], {}).fresh, L.agentKey(local, "w1:p1"));
+    assert.strictEqual(L.attention([remote, local], {}).fresh, L.agentKey(local, "w1:p1"));
+    // Within one state the newer seq still wins.
+    const done2 = { name: "c", agentList: [{ pane: "w1:p1", status: "done", seq: 2 }, { pane: "w1:p2", status: "done", seq: 5 }] };
+    assert.strictEqual(L.attention([done2], {}).fresh, L.agentKey(done2, "w1:p2"));
+});
+
 test("redesign helpers", () => {
     const s = { name: "default", isDefault: true, running: true, agentList: [{ workspace: "checkout-service", kind: "claude", tab: "" }, { workspace: "checkout-service", kind: "claude", tab: "3" }] };
     assert.strictEqual(L.sharedWorkspace(s), "checkout-service");

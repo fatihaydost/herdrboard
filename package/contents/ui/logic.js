@@ -193,8 +193,10 @@ function bestRow(sessions, rows) {
 
 // Which agent started asking since the previous poll, for the blinking dot.
 // `before` is the previous poll's set of wanting agent keys. Returns
-// { wanting, fresh } where fresh is the key of the newest one ("" for none;
-// a tie on state_change_seq goes to the first drawn).
+// { wanting, fresh } where fresh is the key of the one that wants the most,
+// then the newest ("" for none; a tie goes to the first drawn).
+// state_change_seq is counted per server, so it only breaks ties within a
+// state: a blocked agent beats a done one on another server whatever its seq.
 function attention(sessions, before) {
     const wanting = {};
     let fresh = null;
@@ -206,8 +208,10 @@ function attention(sessions, before) {
             const key = agentKey(session, agents[j].pane);
             wanting[key] = true;
             if (before && before[key]) continue;
-            if (fresh === null || (agents[j].seq || 0) > fresh.seq)
-                fresh = { key: key, seq: agents[j].seq || 0 };
+            const rank = attentionRank(agents[j].status);
+            const seq = agents[j].seq || 0;
+            if (fresh === null || rank < fresh.rank || (rank === fresh.rank && seq > fresh.seq))
+                fresh = { key: key, rank: rank, seq: seq };
         }
     }
     return { wanting: wanting, fresh: fresh ? fresh.key : "" };
