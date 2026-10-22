@@ -9,8 +9,8 @@ import org.kde.plasma.components as PlasmaComponents3
 import "logic.js" as Logic
 
 // One herdr session, laid out as a section: a header line (name, a quiet hint,
-// a hairline, and the open / kill or delete buttons, quiet until hover or
-// keyboard focus), then one row per agent. Clicking the header opens the
+// a hairline, and the open / kill or delete buttons, always there but dimmed
+// until hover or keyboard focus), then one row per agent. Clicking the header opens the
 // session; clicking an agent lands on it.
 ColumnLayout {
     id: row
@@ -127,7 +127,7 @@ ColumnLayout {
                     iconSource: "edit-delete-symbolic"
                     hoverColor: Kirigami.Theme.negativeTextColor
                     text: i18n("Delete this stopped session (X)")
-                    onClicked: row.herd.removeSession(row.modelData)
+                    onClicked: row.view.askKill(row.modelData, "delete")
                 }
             }
         }

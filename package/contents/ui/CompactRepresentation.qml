@@ -3,10 +3,9 @@ import QtQuick
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.components as PlasmaComponents3
 
-// Tray / panel icon with the running-server count on a badge. The badge is
-// red when an agent is waiting on you, green when work finished unseen, amber
-// while something is busy, and gone when every agent is idle: then there is
-// nothing to say. Colours come from the colour scheme.
+// Tray / panel icon with a badge: red with the number of agents waiting on
+// you, a green dot when work finished unseen, an amber dot while something is
+// busy, and gone when every agent is idle: then there is nothing to say. Colours come from the colour scheme.
 MouseArea {
     id: compact
 

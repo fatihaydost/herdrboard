@@ -29,8 +29,9 @@ Each session is a section: its name with a quiet hint (`default` for the
 shared session, and the workspace when all its agents share one), then one row
 per agent. A row leads with what the agent is doing (its terminal title); the
 second line is its kind (claude, codex, ...) and where it sits. A stopped
-session names the workspaces herdr saved for it. The open and kill buttons of
-a session appear when you hover its header or reach it with the keyboard.
+session names the workspaces herdr saved for it. The open and kill (or delete)
+buttons of a session are always there, dimmed until you hover its header or
+reach it with the keyboard.
 
 | state | colour | meaning |
 |---|---|---|
@@ -62,8 +63,8 @@ configure and pin buttons; Herdrboard draws no second header there.
 - **The skull** (or `K`) kills that server. It asks first, and the question
   opens on **Cancel**. It signals the process (TERM, then KILL a second later)
   rather than asking over herdr's socket, so a wedged server still goes.
-- **The bin** (or `X`) deletes a stopped session for good. The shared
-  `default` session is never deleted from here.
+- **The bin** (or `X`) deletes a stopped session for good. It asks first, on
+  **Cancel** as well. The shared `default` session is never deleted from here.
 - `Up`/`Down` walk the agents, `R` refreshes, and so does a middle click on the
   tray icon.
 
@@ -91,8 +92,8 @@ runs while the popup is open or when you open a session.
 
 A terminal that puts every window in one process (kitty `--single-instance`,
 Konsole's single-process mode) gives several windows the same process id. Those
-windows are skipped rather than guessed at: the session is not shown bold and
-opening it starts another window. Plain `kitty` and Konsole (which Herdrboard
+windows are skipped rather than guessed at: the session's open button does not
+offer to show its window, and opening it starts another window. Plain `kitty` and Konsole (which Herdrboard
 starts with `--separate`) are matched normally.
 
 ## Remote machines

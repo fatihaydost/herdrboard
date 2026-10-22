@@ -10,23 +10,27 @@ import org.kde.plasma.extras as PlasmaExtras
 
 import "logic.js" as Logic
 
-// The popup: every session, every agent inside it, and the one question asked
-// before a server is killed.
+// The popup: every session, every agent inside it, and the question asked
+// before a server is killed or a stopped session deleted.
 //
 // Keys: Up/Down walk the agents, Enter lands on the one under the cursor,
-// O opens its session, K kills its server (asks first), X deletes a stopped
-// session, R refreshes.
+// O opens its session, K kills its server, X deletes a stopped session (both
+// ask first), R refreshes.
 PlasmaExtras.Representation {
     id: full
 
     // The PlasmoidItem (main.qml) that owns the data and the actions.
     required property var herd
 
-    // Keyboard cursor over navRows; shown after the first key press.
+    // Keyboard cursor over navRows; shown after the first key press. The key
+    // of its row lets it follow that row when a poll shifts the list.
     property int cursor: -1
+    property string cursorKey: ""
     property bool keyboardActive: false
-    // The session the kill dialog is asking about, while it is open.
+    // The session the dialog is asking about, while it is open, and what it
+    // asks: "kill" or "delete".
     property var killTarget: null
+    property string killAction: "kill"
 
     readonly property var rows: Logic.navRows(herd.sessions)
     readonly property string unreachable: Logic.unreachableText(herd.machines)
@@ -73,6 +77,7 @@ PlasmaExtras.Representation {
         } else {
             cursor = Math.max(0, Math.min(rows.length - 1, cursor + delta));
         }
+        cursorKey = Logic.navKey(herd.sessions, rows[cursor]);
         list.positionViewAtIndex(rows[cursor].sessionIndex, ListView.Contain);
     }
 
@@ -87,12 +92,17 @@ PlasmaExtras.Representation {
             herd.openSession(session);
     }
 
-    // Killing is the one action that cannot be undone: the server goes and so
-    // does everything running inside it. The question opens on Cancel, because
-    // a dialog that destroys something on a reflexive Enter trains the reflex.
-    function askKill(session) {
-        if (!session || !session.running || session.remote === true || !Logic.validName(session.name))
+    // Neither can be undone: a kill takes the server and everything running in
+    // it, a delete throws away what a stopped session saved. The question opens
+    // on Cancel, because a dialog that destroys something on a reflexive Enter
+    // trains the reflex.
+    function askKill(session, action) {
+        const act = action === "delete" ? "delete" : "kill";
+        if (!session || session.remote === true || !Logic.validName(session.name))
             return;
+        if (act === "kill" ? !session.running : (session.running || session.isDefault))
+            return;
+        killAction = act;
         killTarget = session;
         // Tab reason: the focus ring shows which button Enter will press.
         cancelButton.forceActiveFocus(Qt.TabFocusReason);
@@ -105,8 +115,12 @@ PlasmaExtras.Representation {
 
     function confirmKill() {
         const session = killTarget;
+        const act = killAction;
         closeKill();
-        herd.killSession(session);
+        if (act === "delete")
+            herd.removeSession(session);
+        else
+            herd.killSession(session);
     }
 
     Connections {
@@ -116,12 +130,16 @@ PlasmaExtras.Representation {
                 full.killTarget = null;
                 full.keyboardActive = false;
                 full.cursor = -1;
+                full.cursorKey = "";
                 keys.forceActiveFocus();
             }
         }
         function onSessionsChanged() {
-            if (full.cursor > full.rows.length - 1)
-                full.cursor = full.rows.length - 1;
+            // An index alone would slide onto whatever a poll inserted above it,
+            // and X or K would then act on that session.
+            const sessions = full.herd.sessions;
+            full.cursor = Logic.followCursor(sessions, full.cursorKey, full.cursor);
+            full.cursorKey = Logic.navKey(sessions, Logic.navRows(sessions)[full.cursor]);
         }
     }
 
@@ -169,7 +187,7 @@ PlasmaExtras.Representation {
                 case Qt.Key_X:
                 case Qt.Key_Delete:
                     if (session && full.keyboardActive) {
-                        full.herd.removeSession(session);
+                        full.askKill(session, "delete");
                         event.accepted = true;
                     }
                     return;
@@ -279,7 +297,7 @@ PlasmaExtras.Representation {
             }
         }
 
-        // ------------------------------------------------------- kill dialog
+        // ------------------------------------------------- kill / delete dialog
 
         Rectangle {
             id: confirm
@@ -317,7 +335,9 @@ PlasmaExtras.Representation {
                     wrapMode: Text.Wrap
                     textFormat: Text.PlainText
                     horizontalAlignment: Text.AlignHCenter
-                    text: full.killTarget ? i18n("Kill the server for %1?", Logic.sessionLabel(full.killTarget)) : ""
+                    text: !full.killTarget ? ""
+                        : full.killAction === "delete" ? i18n("Delete the saved session %1?", Logic.sessionLabel(full.killTarget))
+                        : i18n("Kill the server for %1?", Logic.sessionLabel(full.killTarget))
                 }
 
                 PlasmaComponents3.Label {
@@ -326,7 +346,8 @@ PlasmaExtras.Representation {
                     textFormat: Text.PlainText
                     horizontalAlignment: Text.AlignHCenter
                     opacity: 0.8
-                    text: i18n("Nothing running inside it is asked to stop first.")
+                    text: full.killAction === "delete" ? i18n("Its saved workspaces and layout are thrown away for good.")
+                        : i18n("Nothing running inside it is asked to stop first.")
                 }
 
                 RowLayout {
@@ -346,8 +367,8 @@ PlasmaExtras.Representation {
 
                     PlasmaComponents3.Button {
                         id: killConfirmButton
-                        text: i18n("Kill")
-                        icon.name: "edit-bomb"
+                        text: full.killAction === "delete" ? i18n("Delete") : i18n("Kill")
+                        icon.name: full.killAction === "delete" ? "edit-delete" : "edit-bomb"
                         KeyNavigation.left: cancelButton
                         KeyNavigation.tab: cancelButton
                         Keys.onReturnPressed: clicked()

@@ -72,18 +72,133 @@ else
 fi
 
 # --------------------------------------------------- a wedged local herdr
+# Ignoring TERM, as a wedged server may: only timeout's -k gets rid of it.
 cat > "$stub/herdr" <<'EOF'
 #!/bin/bash
+trap '' TERM
 sleep 30
 EOF
 start=$(date +%s)
 out=$(PATH="$stub:$PATH" XDG_CACHE_HOME="$stub/cache" bash "$SCRIPT" list --no-windows < /dev/null)
 took=$(( $(date +%s) - start ))
 if (( took <= 8 )) && [[ $(jq -r .ok <<<"$out") == false ]]; then
-  ok "a wedged herdr times out (${took}s) instead of hanging the poll"
+  ok "a wedged herdr that ignores TERM times out (${took}s) instead of hanging the poll"
 else
   bad "wedged herdr: took ${took}s, output $out"
 fi
+
+# ------------------------------- untitled agents, multi-document answers
+# Two documents where one is asked for: jq -e alone passes that, and the
+# spliced result would take every other row down with it.
+cat > "$stub/herdr" <<'EOF'
+#!/bin/bash
+case "$*" in
+  "session list --json")
+    printf '{"sessions":[{"name":"default","default":true,"running":true},{"name":"twice","running":true},{"name":"dup","running":false,"session_dir":"%s/dup"},{"name":"fine","running":false,"session_dir":"%s/fine"}]}\n' "$HB_DIR" "$HB_DIR" ;;
+  "api snapshot")
+    echo '{"result":{"snapshot":{"agents":[{"agent_status":"blocked","agent":"claude","terminal_title_stripped":""},{"agent_status":"working","terminal_title_stripped":"","terminal_title":"tt"},{"agent_status":"idle"}],"workspaces":[],"tabs":[]}}}' ;;
+  "--session twice api snapshot")
+    echo '{"result":{"snapshot":{}}}'; echo '{"result":{"snapshot":{}}}' ;;
+  "machine list --json") echo '[]' ;;
+  *) exit 1 ;;
+esac
+EOF
+mkdir -p "$stub/dup" "$stub/fine"
+echo '{"workspaces":[{"custom_name":"a"}]}{"workspaces":[{"custom_name":"b"}]}' > "$stub/dup/session.json"
+echo '{"workspaces":[{"custom_name":"kept"}]}' > "$stub/fine/session.json"
+out=$(HB_DIR="$stub" PATH="$stub:$PATH" XDG_CACHE_HOME="$stub/cache" bash "$SCRIPT" list --no-windows < /dev/null)
+got=$(jq -c '[.blocked, (.sessions[] | select(.name == "default") | [.agents, [.agentList[].title]]),
+              (.sessions[] | select(.name == "twice") | .error),
+              (.sessions[] | select(.name == "dup") | .projects),
+              (.sessions[] | select(.name == "fine") | .projects)]' <<<"$out" 2>/dev/null)
+if [[ $got == '[1,[3,["claude","tt",""]],"no answer from this server",[],["kept"]]' ]]; then
+  ok "untitled agents keep their row; a two-document snapshot or session.json fails alone"
+else
+  bad "untitled / multi-document: $got from $out"
+fi
+
+# ----------------------------------------------------- remote machines
+# One machine answers, one fails with herdr's wrapped error.
+cat > "$stub/herdr" <<'EOF'
+#!/bin/bash
+case "$*" in
+  "session list --json") echo '{"sessions":[{"name":"default","default":true,"running":true}]}' ;;
+  "api snapshot") echo '{"result":{"snapshot":{"agents":[],"workspaces":[],"tabs":[]}}}' ;;
+  "machine list --json")
+    echo '[{"id":"m1","label":"box one","target":"me@box1","enabled":true},{"id":"m2","label":"box two","target":"box2","enabled":true},{"id":"m3","target":"box3","enabled":false}]' ;;
+  "--version") echo 'herdr 0.9.1' ;;
+  "--machine m1 api snapshot")
+    echo '{"result":{"snapshot":{"agents":[{"agent_status":"blocked","pane_id":"w1:p1","terminal_title":"far"}],"workspaces":[{"workspace_id":"w1","label":"remote-proj"}],"tabs":[]}}}' ;;
+  "--machine m2 api snapshot")
+    echo 'Error: Custom { kind: Other, error: "connection refused" }' >&2; exit 1 ;;
+  *) exit 1 ;;
+esac
+EOF
+out=$(PATH="$stub:$PATH" XDG_CACHE_HOME="$stub/cache" XDG_RUNTIME_DIR="$stub" bash "$SCRIPT" list --no-windows < /dev/null)
+got=$(jq -c '[.blocked, [.machines[] | [.id, .ok, .error]],
+              [.sessions[] | select(.remote) | [.machineId, .machineLabel, .sshTarget, .agents, .projects]]]' <<<"$out" 2>/dev/null)
+if [[ $got == '[1,[["m1",true,""],["m2",false,"connection refused"]],[["m1","box one","me@box1",1,["remote-proj"]]]]' ]]; then
+  ok "remote: the answering machine adds its rows, the failing one only its error"
+else
+  bad "remote machines: $got from $out"
+fi
+
+# ------------------------------------------------- demo mode writes nothing
+# Every outside command a write could reach logs its call, and the log must
+# stay empty. Terminals and qdbus are stubbed too, so a regression here cannot
+# reach the real desktop.
+demo=$(mktemp -d)
+printf '#!/bin/bash\necho "${0##*/} $*" >> "%s/calls"\nexit 1\n' "$demo" > "$demo/herdr"
+chmod +x "$demo/herdr"
+for t in qdbus6 qdbus-qt6 qdbus journalctl kreadconfig6 xdg-terminal-exec konsole setsid; do ln -s herdr "$demo/$t"; done
+hd_demo() { PATH="$demo:$PATH" XDG_CACHE_HOME="$demo/cache" XDG_CONFIG_HOME="$demo/config" XDG_RUNTIME_DIR="$demo" bash "$SCRIPT" "$@" < /dev/null; }
+r=$(hd_demo demo on | jq -r .ok)
+for c in "open proj" "open proj m1" "focus proj w1:p1" "kill proj" "delete proj" "list"; do
+  # shellcheck disable=SC2086
+  r+=" $(hd_demo $c | jq -r .ok)"
+done
+if [[ $r == "true true true true true true true" && ! -s $demo/calls ]]; then
+  ok "demo: open, focus, kill and delete answer ok and call nothing"
+else
+  bad "demo: results [$r], calls: $(cat "$demo/calls" 2>/dev/null)"
+fi
+rm -rf -- "$demo"
+
+# --------------------------------------------- window_map (real processes)
+# Fake terminals are real processes owning one fake window each. Under them,
+# processes whose command line reads `herdr --session proj` and
+# `notherdr --session other`; only the first is a client.
+wm=$(mktemp -d)
+start_under_terminal() { # pidfile cmdline: a bash "terminal" with one child
+  # shellcheck disable=SC2016
+  bash -c 'perl -e '\''$0 = shift; sleep 30'\'' "$1" & echo $! > "$2.child"; wait' _ "$2" "$1" &
+  echo $! > "$1"
+  disown  # bash would report the job when it is killed below
+}
+start_under_terminal "$wm/t1" "herdr --session proj"
+start_under_terminal "$wm/t2" "notherdr --session other"
+for f in t1 t2; do
+  for ((i = 0; i < 40; i++)); do
+    [[ -s $wm/$f.child ]] && ps -o args= -p "$(cat "$wm/$f.child")" | grep -q 'herdr --session' && break
+    sleep 0.05
+  done
+done
+got=$(
+  # shellcheck source=/dev/null
+  source "$SCRIPT"; set +e
+  kwin_windows() {
+    printf '%s\t%s\n' "$(cat "$wm/t1")" "{00000000-0000-0000-0000-0000000000a1}" \
+                      "$(cat "$wm/t2")" "{00000000-0000-0000-0000-0000000000a2}"
+  }
+  window_map
+)
+for f in t1 t1.child t2 t2.child; do kill -KILL "$(cat "$wm/$f")" 2>/dev/null; done
+if [[ $got == $'\tproj\t{00000000-0000-0000-0000-0000000000a1}' ]]; then
+  ok "window_map: a herdr client maps to its terminal's window, a non-herdr argv0 does not"
+else
+  bad "window_map: got [$got]"
+fi
+rm -rf -- "$wm"
 
 # --------------------------------------------- terminal choice and argv
 # A separate kdeglobals in a temp XDG_CONFIG_HOME; stub terminals on a PATH

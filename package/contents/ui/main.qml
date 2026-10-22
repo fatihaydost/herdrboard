@@ -43,6 +43,9 @@ PlasmoidItem {
     // The session the script is acting on, so its row can dim.
     property string pendingKey: ""
     property bool listBusy: false
+    // A refresh asked for while a poll is running (after an action, on opening
+    // the popup) is owed one more poll, not dropped.
+    property bool listAgain: false
     property bool actionBusy: false
     // Requests that arrived while another action was running, run in order:
     // keeping only the latest let a confirmed kill vanish behind a later click.
@@ -105,19 +108,28 @@ PlasmoidItem {
     }
 
     function refresh() {
-        if (listBusy)
+        if (listBusy) {
+            listAgain = true;
             return;
+        }
         listBusy = true;
-        // The window lookup (which session already has a window, drawn bold)
-        // only matters while the list is on screen.
+        // The window lookup (which session already has a window: its open
+        // button raises it) only matters while the list is on screen.
         const cmd = "bash " + Logic.shellQuote(script) + " list" + (expanded ? "" : " --no-windows");
         exec.run(cmd, (code, stdout, stderr) => {
             listBusy = false;
             applyPayload(stdout);
+            if (listAgain) {
+                listAgain = false;
+                refresh();
+            }
         });
     }
 
     function applyPayload(text) {
+        // Any answer ends the wait, a failed one too: the popup's "cannot reach"
+        // placeholders only show once something has come back.
+        loaded = true;
         let data;
         try {
             data = JSON.parse(text);
@@ -146,7 +158,6 @@ PlasmoidItem {
         blockedCount = data.blocked || 0;
         doneCount = data.done || 0;
         workingCount = data.working || 0;
-        loaded = true;
     }
 
     // Polled rather than subscribed: herdr has one event socket per server, and
@@ -237,8 +248,8 @@ PlasmoidItem {
         run("kill", session);
     }
 
-    // A stopped session's directory is thrown away. The shared session is
-    // herdr's own and is never deleted from here.
+    // A stopped session's directory is thrown away, so the popup asks first
+    // too. The shared session is herdr's own and is never deleted from here.
     function removeSession(session) {
         if (!session || session.isDefault || session.running || session.remote === true)
             return;

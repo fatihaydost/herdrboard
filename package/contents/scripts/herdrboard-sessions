@@ -119,7 +119,7 @@ private_dir() {
 # refreshing until Plasma restarts.
 readonly LOCAL_TIMEOUT=5
 hd() {
-  timeout --signal=TERM "$LOCAL_TIMEOUT" herdr "$@" < /dev/null
+  timeout --signal=TERM -k 1 "$LOCAL_TIMEOUT" herdr "$@" < /dev/null
 }
 
 readable_file() { [[ -f "$1" && ! -L "$1" ]]; }
@@ -285,8 +285,6 @@ kwin_activate() {
 #
 # Answers in $found_session/$found_target instead of stdout: this runs once per
 # herdr-looking process and a command substitution would fork each time.
-found_session=""
-found_target=""
 session_in_args() {
   found_session=""
   found_target=""
@@ -399,6 +397,12 @@ snapshot_for() {
   printf '%s' "$out"
 }
 
+# The answer is spliced into a larger document as text, so it must be exactly
+# one JSON document: `jq -e` alone judges only the last of several.
+is_one_snapshot() {
+  printf '%s' "$1" | jq -se 'length == 1 and (.[0].result.snapshot | type == "object")' >/dev/null 2>&1
+}
+
 # Session rows from a session list plus its servers' snapshots: the one place
 # that turns what herdr says into what the widget draws. Inputs arrive on stdin
 # one after the other (session list, snapshots keyed by name, saved labels of
@@ -434,7 +438,10 @@ readonly ROWS_JQ='
            done:    ([$agents[] | select(.agent_status == "done")] | length),
            workspaces: (($snap.workspaces // []) | length),
            agentList: ($agents
-                       | map({title: (.terminal_title_stripped // .terminal_title // ""),
+                       # `//` only skips null and false, and an empty stripped
+                       # title is common; an untitled agent still gets a row.
+                       | map({title: ([.terminal_title_stripped, .terminal_title, .agent]
+                                      | map(select(type == "string" and . != "")) | .[0] // ""),
                               # The agent kind herdr detected (claude, codex, ...).
                               kind: (.agent // ""),
                               status: (.agent_status // "unknown"),
@@ -442,7 +449,6 @@ readonly ROWS_JQ='
                               workspace: ($wslabels[.workspace_id // ""] // ""),
                               tab: ($tablabels[.tab_id // ""] // ""),
                               seq: (.state_change_seq // 0)})
-                       | map(select(.title != ""))
                        # The attention order herdr uses itself: wants an answer,
                        # finished unseen, busy, waiting for input. Stable sort.
                        | sort_by(if   .status == "blocked" then 0
@@ -487,7 +493,7 @@ collect_sessions() {
       # A server that does not answer, or answers with something that is not
       # a snapshot, gets an error on its own row; the others still count.
       if snap=$(snapshot_for "$name" "$is_default") &&
-         printf '%s' "$snap" | jq -e '.result.snapshot | objects' >/dev/null 2>&1; then
+         is_one_snapshot "$snap"; then
         snapshots+="${snapshots:+,}\"$name\":$snap"
       else
         snapshots+="${snapshots:+,}\"$name\":{\"herdrboardError\":\"no answer from this server\"}"
@@ -498,7 +504,8 @@ collect_sessions() {
     readable_file "$dir/session.json" || continue
     over_byte_cap "$(head -c "$((SESSION_FILE_CAP + 1))" -- "$dir/session.json" 2>/dev/null || true)" \
       "$SESSION_FILE_CAP" && continue
-    labels=$(jq -c --arg home "$HOME" '[.workspaces[]?
+    labels=$(jq -sc --arg home "$HOME" 'if length == 1 then .[0] else error end
+                    | [.workspaces[]?
                      | (.custom_name
                         // (if (.identity_cwd // "") == $home then "~"
                             else (.identity_cwd // "" | split("/") | last) end))
@@ -510,9 +517,6 @@ collect_sessions() {
     jq -r '.sessions[]? | "\(.name)\t\(.default // false)\t\(.running // false)\t\(.session_dir // "")"')
   snapshots="{$snapshots}"
   saved="{$saved}"
-  # Every snapshot was checked on its own above, so this is only a backstop.
-  printf '%s' "$saved" | jq -e . >/dev/null 2>&1 || saved="{}"
-  printf '%s' "$snapshots" | jq -e . >/dev/null 2>&1 || snapshots='{}'
 
   printf '%s\n%s\n%s\n' "$sessions_json" "$snapshots" "$saved" | jq -c \
     --argjson agentCap "$AGENT_COUNT_CAP" \
@@ -566,11 +570,11 @@ remote_floor_met() {
 machine_rows() {
   local mid="$1" msession="$2" errlog="$3" out
   valid_session_name "$msession" || return 1
-  out=$(timeout --signal=TERM 10 herdr --machine "$mid" api snapshot \
+  out=$(timeout --signal=TERM -k 1 10 herdr --machine "$mid" api snapshot \
     2>"$errlog" < /dev/null | head -c "$((SNAPSHOT_BYTE_CAP + 1))") || true
   [[ -n $out ]] || return 1
   over_byte_cap "$out" "$SNAPSHOT_BYTE_CAP" && return 1
-  printf '%s' "$out" | jq -e '.result.snapshot | objects' >/dev/null 2>&1 || return 1
+  is_one_snapshot "$out" || return 1
   {
     jq -nc --arg name "$msession" \
       '{sessions: [{name: $name, default: ($name == "default"), running: true, session_dir: ""}]}'
@@ -858,7 +862,7 @@ cmd_focus() {
 
   if [[ -n $machine ]]; then
     target=$(machine_target "$machine") || die "no such machine"
-    timeout --signal=TERM 15 herdr --machine "$machine" agent focus "$pane" >/dev/null 2>&1 < /dev/null || true
+    timeout --signal=TERM -k 1 15 herdr --machine "$machine" agent focus "$pane" >/dev/null 2>&1 < /dev/null || true
   elif [[ $name == default ]]; then
     hd agent focus "$pane" >/dev/null 2>&1 || true
   else

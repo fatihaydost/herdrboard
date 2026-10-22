@@ -10,7 +10,7 @@ const { execFileSync } = require("child_process");
 const src = fs.readFileSync(path.join(__dirname, "../package/contents/ui/logic.js"), "utf8")
     .replace(/^\.pragma library\s*$/m, "");
 const L = {};
-vm.runInNewContext(src + "\nObject.assign(out, {shellQuote, validName, validPane, validMachine, actionCommand, rowKey, agentKey, attentionRank, agentWants, badgeState, agentNote, sessionLabel, machineName, subtitleFor, cleanTitle, unreachableText, navRows, bestRow, attention, sharedWorkspace, agentDetail, sessionHint, sessionMeta, badgeText, herdEmpty});", { out: L });
+vm.runInNewContext(src + "\nObject.assign(out, {shellQuote, validName, validPane, validMachine, actionCommand, rowKey, agentKey, attentionRank, agentWants, badgeState, agentNote, sessionLabel, machineName, subtitleFor, cleanTitle, unreachableText, navRows, bestRow, navKey, followCursor, attention, sharedWorkspace, agentDetail, sessionHint, sessionMeta, badgeText, herdEmpty});", { out: L });
 
 let n = 0;
 function test(name, fn) {
@@ -93,6 +93,31 @@ test("navRows and bestRow", () => {
     assert.strictEqual(L.bestRow(sessions, rows), 3);
     assert.strictEqual(L.bestRow([{ agentList: [] }], L.navRows([{ agentList: [] }])), 0);
     assert.strictEqual(L.bestRow([], []), -1);
+});
+
+test("followCursor keeps the cursor on the same row across polls", () => {
+    const a = { name: "a", agentList: [{ pane: "w1:p1" }, { pane: "w1:p2" }] };
+    const b = { name: "b", agentList: [] };
+    const c = { name: "c", agentList: [{ pane: "w1:p1" }] };
+    const before = [a, b, c];
+    const keyB = L.navKey(before, L.navRows(before)[2]);
+    assert.strictEqual(keyB, L.rowKey(b));
+    // A new session drawn above: the cursor moves down with "b", not onto "new".
+    const inserted = [{ name: "new", agentList: [{ pane: "w1:p1" }] }, a, b, c];
+    assert.strictEqual(L.followCursor(inserted, keyB, 2), 3);
+    // An agent row follows its pane, and same pane id in another session is not it.
+    const keyC = L.navKey(before, L.navRows(before)[3]);
+    assert.strictEqual(L.followCursor(inserted, keyC, 3), 4);
+    // The agent left, its session stayed: the session's first row.
+    const keyA2 = L.navKey(before, L.navRows(before)[1]);
+    assert.strictEqual(L.followCursor([{ name: "a", agentList: [{ pane: "w1:p1" }] }, b, c], keyA2, 1), 0);
+    // The session went: same place, clamped.
+    assert.strictEqual(L.followCursor([a], keyB, 2), 1);
+    assert.strictEqual(L.followCursor([], keyB, 2), -1);
+    assert.strictEqual(L.followCursor(before, "", -1), -1);
+    // Remote "default" and local "default" are different rows.
+    const local = { name: "default", agentList: [] }, remote = { name: "default", machineId: "m1", agentList: [] };
+    assert.strictEqual(L.followCursor([remote, local], L.rowKey(local), 0), 1);
 });
 
 test("attention: only what started asking since the last poll", () => {

@@ -150,6 +150,30 @@ function navRows(sessions) {
     return rows;
 }
 
+// A nav row's identity: the cursor holds on to this, not to an index that a
+// poll can shift onto another session.
+function navKey(sessions, row) {
+    if (!row) return "";
+    const session = sessions[row.sessionIndex];
+    if (row.agentIndex < 0) return rowKey(session);
+    return agentKey(session, ((session.agentList || [])[row.agentIndex] || {}).pane);
+}
+
+// Where the cursor goes after the list changed: back onto the row it was on;
+// if that agent is gone, its session's first row; if the session is gone too,
+// the same place, clamped. -1 stays -1.
+function followCursor(sessions, key, index) {
+    const rows = navRows(sessions);
+    if (index < 0 || key === "") return Math.min(index, rows.length - 1);
+    let sameSession = -1;
+    for (let i = 0; i < rows.length; i++) {
+        if (navKey(sessions, rows[i]) === key) return i;
+        const sk = rowKey(sessions[rows[i].sessionIndex]);
+        if (sameSession < 0 && (key === sk || key.indexOf(sk + "\u0000") === 0)) sameSession = i;
+    }
+    return sameSession >= 0 ? sameSession : Math.min(index, rows.length - 1);
+}
+
 // Where the cursor starts when the popup opens: the agent that wants the most.
 function bestRow(sessions, rows) {
     let best = -1;
