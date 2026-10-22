@@ -9,7 +9,7 @@
 
 **[herdr](https://herdr.dev) in the KDE Plasma 6 system tray: every server and agent at a glance, one click to open or focus one.**
 
-![Plasma 6](https://img.shields.io/badge/Plasma-6-1d99f3) ![License: MIT](https://img.shields.io/badge/license-MIT-green) ![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![Plasma 6](https://img.shields.io/badge/Plasma-6-1d99f3) ![License: MIT](https://img.shields.io/badge/license-MIT-green) ![Version](https://img.shields.io/badge/version-0.1.0-blue) [![KDE Store](https://img.shields.io/badge/KDE%20Store-Herdrboard-1d99f3?logo=kde&logoColor=white)](https://store.kde.org/p/2380062/)
 
 <img src="docs/popup.png" alt="The Herdrboard popup in a dark colour scheme, listing herdr sessions with the agents inside each" width="400"> <img src="docs/popup-light.png" alt="The same popup in Breeze Light" width="400">
 
@@ -115,6 +115,14 @@ Clicking opens `herdr --remote <target> --session <name>`. Killing and deleting
 stay local: remote rows offer neither.
 
 ## Install
+
+From the [KDE Store](https://store.kde.org/p/2380062/): right-click the panel →
+*Add Widgets…* → *Get New Widgets…* → *Download New Plasma Widgets…*, search
+for Herdrboard. Or download `herdrboard.plasmoid` from the
+[latest release](https://github.com/fatihaydost/herdrboard/releases/latest) and
+run `kpackagetool6 --type Plasma/Applet --install herdrboard.plasmoid`.
+
+From source:
 
 ```bash
 git clone https://github.com/fatihaydost/herdrboard
