@@ -36,6 +36,7 @@ MouseArea {
     }
 
     Kirigami.Icon {
+        id: icon
         anchors.fill: parent
         source: Qt.resolvedUrl("../icons/herdrboard-symbolic.svg")
         isMask: true
@@ -45,20 +46,28 @@ MouseArea {
         opacity: compact.herd.reachable ? 1 : 0.5
     }
 
-    // A corner mark, small enough to leave the icon readable at 22 px. Only
-    // "needs you" carries a number (how many agents wait on you, the one count
-    // worth reading at that size); done and working are a plain dot. Server
-    // and agent totals live in the tooltip.
+    // The glyph is drawn as a centred square; the badge sits on its empty
+    // top-right pane (centre at 11.06/16, 4.94/16 of herdrboard-symbolic.svg).
+    readonly property real glyph: Math.min(width, height)
+    readonly property real glyphX: (width - glyph) / 2
+    readonly property real glyphY: (height - glyph) / 2
+
+    // A mark in the icon's empty pane, small enough to leave the icon readable
+    // at 22 px. Only "needs you" carries a number (how many agents wait on
+    // you, the one count worth reading at that size); done and working are a
+    // plain dot. Server and agent totals live in the tooltip.
     Rectangle {
         id: badge
         readonly property string label: compact.herd.badgeCount
         visible: compact.herd.reachable && compact.herd.badgeState !== "" && compact.width >= Kirigami.Units.iconSizes.small
-        anchors.right: parent.right
-        anchors.top: parent.top
+        // A dot fits inside the pane; a count needs more room to stay legible,
+        // so it spills over the pane's frame evenly.
         height: label !== ""
-            ? Math.max(Math.round(compact.height * 0.42), 8)
-            : Math.max(Math.round(compact.height * 0.3), 6)
+            ? Math.max(Math.round(compact.glyph * 0.42), 8)
+            : Math.max(Math.round(compact.glyph * 0.26), 5)
         width: Math.max(height, countLabel.implicitWidth + Kirigami.Units.smallSpacing)
+        x: Math.round(compact.glyphX + compact.glyph * 0.6914 - width / 2)
+        y: Math.round(compact.glyphY + compact.glyph * 0.3086 - height / 2)
         radius: height / 2
         color: compact.herd.stateColor(compact.herd.badgeState)
         // A rim in the panel's own background keeps the mark apart from the
