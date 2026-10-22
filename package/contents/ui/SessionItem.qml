@@ -93,7 +93,8 @@ ColumnLayout {
 
             PlasmaComponents3.Label {
                 visible: text !== ""
-                text: i18n(Logic.sessionMeta(row.modelData))
+                // i18n("") only logs a warning: a running session with agents has no meta.
+                text: { const meta = Logic.sessionMeta(row.modelData); return meta === "" ? "" : i18n(meta); }
                 textFormat: Text.PlainText
                 font: Kirigami.Theme.smallFont
                 color: Kirigami.Theme.disabledTextColor
