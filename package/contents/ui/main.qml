@@ -191,7 +191,11 @@ PlasmoidItem {
 
     // ------------------------------------------------------------- actions
 
-    function run(action, session, extra) {
+    // fromQueue: started by the queue, not a click. Only a click clears the
+    // last error, or a queued success would hide the failure just before it.
+    function run(action, session, extra, fromQueue) {
+        if (!fromQueue)
+            actionError = "";
         if (actionBusy) {
             queuedActions = queuedActions.concat([{ action: action, session: session, extra: extra }]);
             return;
@@ -200,7 +204,6 @@ PlasmoidItem {
         if (cmd === "")
             return;
         actionBusy = true;
-        actionError = "";
         pendingKey = Logic.rowKey(session);
         exec.run(cmd, (code, stdout, stderr) => {
             actionBusy = false;
@@ -221,7 +224,7 @@ PlasmoidItem {
             if (queuedActions.length > 0) {
                 const next = queuedActions[0];
                 queuedActions = queuedActions.slice(1);
-                run(next.action, next.session, next.extra);
+                run(next.action, next.session, next.extra, true);
             }
         });
     }
