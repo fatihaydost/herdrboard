@@ -44,9 +44,9 @@ PlasmoidItem {
     property string pendingKey: ""
     property bool listBusy: false
     property bool actionBusy: false
-    // A request that arrived while another action was running. Only the last
-    // one is kept: it is what was clicked most recently.
-    property var queuedAction: null
+    // Requests that arrived while another action was running, run in order:
+    // keeping only the latest let a confirmed kill vanish behind a later click.
+    property var queuedActions: []
 
     // The agent that started asking since the previous poll blinks, so the
     // sound herdr played has a face. The first poll only sets the baseline.
@@ -179,7 +179,7 @@ PlasmoidItem {
 
     function run(action, session, extra) {
         if (actionBusy) {
-            queuedAction = { action: action, session: session, extra: extra };
+            queuedActions = queuedActions.concat([{ action: action, session: session, extra: extra }]);
             return;
         }
         const cmd = Logic.actionCommand(script, action, session, extra);
@@ -198,9 +198,9 @@ PlasmoidItem {
                 console.warn("herdboard:", action, "gave unexpected output");
             }
             settleTimer.restart();
-            if (queuedAction !== null) {
-                const next = queuedAction;
-                queuedAction = null;
+            if (queuedActions.length > 0) {
+                const next = queuedActions[0];
+                queuedActions = queuedActions.slice(1);
                 run(next.action, next.session, next.extra);
             }
         });

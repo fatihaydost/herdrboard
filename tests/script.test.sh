@@ -122,5 +122,60 @@ expect_argv "" "$(argv_for '' '' xdg-terminal-exec konsole)" "no terminal at all
 expect_argv "xdg-terminal-exec|bash|/p/herdboard-attach|" "$(argv_for 'kitty; touch /tmp/pwned' '')" "a shell metacharacter stays in the word: \"kitty;\" is no command, nothing evaluated"
 rm -rf -- "$term"
 
+# ------------------------------------------------ kill / delete (stub ss)
+# A fake herdr server is a real process (comm "herdr", argv "server") and a
+# stub `ss` points the session's socket at it, so the /proc checks run for
+# real. Each is started in a subshell that exits, so nothing here keeps it as
+# a zombie that `kill -0` would still see.
+kd=$(mktemp -d)
+cat > "$kd/herdr" <<'EOF2'
+#!/bin/bash
+case "$1 ${2-}" in
+  "server ") [[ -n ${HB_IGNORE_TERM-} ]] && trap '' TERM; while :; do sleep 0.05; done ;;
+  "session list")
+    printf '{"sessions":[{"name":"proj","running":true,"socket_path":"%s"},{"name":"old","running":false},{"name":"bad","running":false}]}\n' "$HB_SOCK" ;;
+  "session delete") [[ $3 == bad ]] && exit 1; echo "$3" >> "$HB_LOG" ;;
+  *) exit 1 ;;
+esac
+EOF2
+cat > "$kd/ss" <<'EOF2'
+#!/bin/bash
+printf 'u_str LISTEN 0 4096 %s 1 * 0 users:(("herdr",pid=%s,fd=3))\n' "$HB_SOCK" "$(cat "$HB_PIDFILE")"
+EOF2
+chmod +x "$kd/herdr" "$kd/ss"
+export HB_SOCK="$kd/proj.sock" HB_PIDFILE="$kd/pid" HB_LOG="$kd/deleted"
+hb() { PATH="$kd:$PATH" XDG_CACHE_HOME="$kd/cache" bash "$SCRIPT" "$@" < /dev/null; }
+spawn() { ( "$@" > /dev/null 2>&1 & echo $! > "$HB_PIDFILE" ); }
+gone() { local i; for ((i = 0; i < 20; i++)); do kill -0 "$1" 2>/dev/null || return 0; sleep 0.05; done; return 1; }
+
+spawn "$kd/herdr" server; pid=$(cat "$HB_PIDFILE")
+if [[ $(hb kill proj | jq -r .ok) == true ]] && gone "$pid"; then
+  ok "kill: TERM ends the session's server"
+else bad "kill: server $pid still alive"; kill -KILL "$pid" 2>/dev/null; fi
+
+spawn env HB_IGNORE_TERM=1 "$kd/herdr" server; pid=$(cat "$HB_PIDFILE")
+if [[ $(hb kill proj | jq -r .ok) == true ]] && gone "$pid"; then
+  ok "kill: a server that ignores TERM gets KILL"
+else bad "kill: TERM-ignoring server $pid still alive"; kill -KILL "$pid" 2>/dev/null; fi
+
+spawn sleep 30; pid=$(cat "$HB_PIDFILE")
+out=$(hb kill proj)
+if [[ $(jq -r .ok <<<"$out") == false ]] && kill -0 "$pid" 2>/dev/null; then
+  ok "kill: a socket owned by something that is not a herdr server is left alone"
+else bad "kill: non-herdr pid: $out"; fi
+kill -KILL "$pid" 2>/dev/null
+
+if [[ $(hb kill nosuch | jq -r .ok) == false && $(hb kill "a;b" | jq -r .ok) == false ]]; then
+  ok "kill: unknown or malformed session refused"
+else bad "kill: unknown session accepted"; fi
+
+: > "$HB_LOG"
+r_run=$(hb delete proj | jq -r .ok); r_old=$(hb delete old | jq -r .ok)
+r_bad=$(hb delete bad | jq -r .ok); r_def=$(hb delete default | jq -r .ok)
+if [[ "$r_run $r_old $r_bad $r_def" == "false true false false" && $(cat "$HB_LOG") == old ]]; then
+  ok "delete: running and default refused, herdr's own refusal reported, stopped one deleted"
+else bad "delete: running=$r_run old=$r_old bad=$r_bad default=$r_def log=[$(cat "$HB_LOG")]"; fi
+rm -rf -- "$kd"
+
 (( fail == 0 )) && echo "all $n tests passed"
 exit $fail

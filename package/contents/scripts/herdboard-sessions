@@ -924,7 +924,13 @@ cmd_delete() {
   valid_session_name "$name" || die "not a session name"
   [[ $name == default ]] && die "the default session is not deleted from here"
   [[ -z ${2-} ]] || die "remote sessions are not deleted from here"
-  hd session delete "$name" >/dev/null 2>&1 || true
+  # The popup can be a poll behind: a session started since then still shows
+  # as stopped, so ask herdr again before throwing its directory away.
+  local running
+  running=$(hd session list --json 2>/dev/null |
+    jq -r --arg name "$name" '.sessions[]? | select(.name == $name) | .running // false' 2>/dev/null)
+  [[ $running == false ]] || die "that session is running or unknown"
+  hd session delete "$name" >/dev/null 2>&1 || die "herdr refused to delete that session"
   printf '{"ok":true}\n'
 }
 
