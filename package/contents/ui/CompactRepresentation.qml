@@ -86,4 +86,19 @@ MouseArea {
             font.bold: true
         }
     }
+
+    // A hollow ring on the glyph's bottom-right corner while an enabled remote
+    // machine did not answer: the counts leave it out, so "nothing needs you"
+    // and "could not check" must not look alike.
+    Rectangle {
+        visible: compact.herd.reachable && compact.herd.unreachableCount > 0 && compact.width >= Kirigami.Units.iconSizes.small
+        width: Math.max(Math.round(compact.glyph * 0.3), 6)
+        height: width
+        x: Math.round(compact.glyphX + compact.glyph - width * 0.85)
+        y: Math.round(compact.glyphY + compact.glyph - height * 0.85)
+        radius: width / 2
+        color: Kirigami.Theme.backgroundColor
+        border.width: 1
+        border.color: Kirigami.Theme.neutralTextColor
+    }
 }

@@ -10,7 +10,7 @@ const { execFileSync } = require("child_process");
 const src = fs.readFileSync(path.join(__dirname, "../package/contents/ui/logic.js"), "utf8")
     .replace(/^\.pragma library\s*$/m, "");
 const L = {};
-vm.runInNewContext(src + "\nObject.assign(out, {shellQuote, validName, validPane, validMachine, actionCommand, rowKey, agentKey, attentionRank, agentWants, badgeState, agentNote, sessionLabel, machineName, subtitleFor, cleanTitle, unreachableText, navRows, bestRow, navKey, followCursor, attention, sharedWorkspace, agentDetail, sessionHint, sessionMeta, badgeText, herdEmpty});", { out: L });
+vm.runInNewContext(src + "\nObject.assign(out, {shellQuote, validName, validPane, validMachine, actionCommand, rowKey, agentKey, attentionRank, agentWants, badgeState, agentNote, sessionLabel, machineName, subtitleFor, cleanTitle, unreachableText, unreachableCount, navRows, bestRow, navKey, followCursor, attention, sharedWorkspace, agentDetail, sessionHint, sessionMeta, badgeText, herdEmpty});", { out: L });
 
 let n = 0;
 function test(name, fn) {
@@ -78,6 +78,8 @@ test("labels", () => {
     assert.strictEqual(L.cleanTitle("✳✳"), "✳✳");
     assert.strictEqual(L.unreachableText([{ ok: true }]), "");
     assert.strictEqual(L.unreachableText([{ ok: false, label: "gpu", error: "unreachable" }, { ok: false, id: "m3", error: "Host key" }]), "unreachable: gpu, m3 (Host key)");
+    assert.strictEqual(L.unreachableCount([{ ok: true }, { ok: false }, {}]), 2);
+    assert.strictEqual(L.unreachableCount(undefined), 0);
 });
 
 test("navRows and bestRow", () => {

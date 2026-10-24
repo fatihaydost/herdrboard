@@ -134,6 +134,14 @@ function unreachableText(machines) {
     return names.length === 0 ? "" : "unreachable: " + names.join(", ");
 }
 
+// How many machines did not answer the last poll: the tray's "could not check".
+function unreachableCount(machines) {
+    let n = 0;
+    for (let i = 0; i < (machines || []).length; i++)
+        if (machines[i].ok !== true) n++;
+    return n;
+}
+
 // What the arrow keys walk: every agent in drawing order, plus one row for a
 // session with no agents so it stays reachable from the keyboard.
 function navRows(sessions) {

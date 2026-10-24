@@ -67,6 +67,10 @@ PlasmoidItem {
         running: runningCount, blocked: blockedCount, done: doneCount, working: workingCount
     })
 
+    // Enabled remote machines that did not answer: their agents are missing
+    // from every count, so "nothing needs you" cannot be trusted while > 0.
+    readonly property int unreachableCount: Logic.unreachableCount(machines)
+
     function stateColor(state) {
         if (state === "blocked")
             return Kirigami.Theme.negativeTextColor;
@@ -89,6 +93,8 @@ PlasmoidItem {
             parts.push(i18n("%1 waiting on you", blockedCount));
         if (doneCount > 0)
             parts.push(i18n("%1 finished", doneCount));
+        if (unreachableCount > 0)
+            parts.push(i18np("%1 machine unreachable", "%1 machines unreachable", unreachableCount));
         return parts.join(", ");
     }
     toolTipTextFormat: Text.PlainText
